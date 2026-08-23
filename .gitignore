@@ -1,0 +1,14 @@
+node_modules/
+artifacts/
+cache/
+typechain-types/
+.env
+.env.*
+*.local
+.throwaway-key.local
+deploy/
+app/dist/
+.vercel
+.DS_Store
+app/node_modules/
+app/dist/

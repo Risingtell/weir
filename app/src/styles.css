@@ -1,0 +1,551 @@
+/*
+ * Weir, styled to sit inside Nimiq Pay rather than next to it.
+ *
+ * Mobile first and mobile only in practice: this renders in a phone WebView,
+ * so every target is thumb sized, the layout respects the notch and the home
+ * indicator, and there is no webfont request standing between a tap and the
+ * first paint.
+ */
+
+:root {
+  --nq-blue: #1f2348;
+  --nq-blue-deep: #171a37;
+  --nq-blue-raised: #262a52;
+  --nq-gold: #e9b213;
+  --nq-orange: #fc8702;
+  --nq-green: #21bca5;
+  --nq-red: #d94432;
+
+  --ink: #ffffff;
+  --ink-dim: rgba(255, 255, 255, 0.62);
+  --ink-faint: rgba(255, 255, 255, 0.38);
+  --hairline: rgba(255, 255, 255, 0.1);
+
+  --radius: 12px;
+  --radius-lg: 20px;
+  --gutter: 20px;
+
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--nq-blue);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 16px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior-y: none;
+}
+
+#app {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
+    env(safe-area-inset-left);
+}
+
+/* --- shell --- */
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px var(--gutter);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.mark {
+  width: 26px;
+  height: 26px;
+  flex: none;
+}
+
+.wordmark {
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  font-size: 14px;
+}
+
+.topbar .chain {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--ink-dim);
+  background: var(--nq-blue-raised);
+  border-radius: 999px;
+  padding: 4px 11px;
+  white-space: nowrap;
+}
+
+main {
+  flex: 1;
+  padding: var(--gutter);
+  padding-bottom: 96px;
+  max-width: 560px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+/* --- typography --- */
+
+h1 {
+  font-size: 27px;
+  line-height: 1.2;
+  margin: 0 0 10px;
+  letter-spacing: -0.02em;
+}
+
+h2 {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink-faint);
+  margin: 28px 0 12px;
+  font-weight: 600;
+}
+
+p {
+  margin: 0 0 16px;
+  color: var(--ink-dim);
+}
+
+.lede {
+  font-size: 17px;
+  color: var(--ink-dim);
+  margin-bottom: 28px;
+}
+
+/* --- cards --- */
+
+.card {
+  background: var(--nq-blue-raised);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  margin-bottom: 14px;
+}
+
+.card.flat {
+  background: transparent;
+  border: 1px solid var(--hairline);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.row + .row {
+  margin-top: 14px;
+}
+
+.spread {
+  justify-content: space-between;
+}
+
+.grow {
+  flex: 1;
+  min-width: 0;
+}
+
+/* --- amounts --- */
+
+.amount {
+  font-size: 34px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.amount .unit {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink-faint);
+  margin-left: 6px;
+}
+
+.label {
+  font-size: 13px;
+  color: var(--ink-faint);
+}
+
+.addr {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--ink-dim);
+  word-break: break-all;
+}
+
+/* --- buttons --- */
+
+button {
+  font-family: inherit;
+  font-size: 16px;
+  border: 0;
+  cursor: pointer;
+}
+
+.btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 54px;
+  padding: 0 20px;
+  border-radius: var(--radius);
+  background: var(--nq-gold);
+  color: #1a1a1a;
+  font-weight: 700;
+  transition: transform 0.06s ease, opacity 0.15s ease;
+}
+
+.btn:active {
+  transform: scale(0.985);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.btn.secondary {
+  background: var(--nq-blue-raised);
+  color: var(--ink);
+  border: 1px solid var(--hairline);
+}
+
+.btn.ghost {
+  background: transparent;
+  color: var(--ink-dim);
+  min-height: 46px;
+  font-weight: 600;
+}
+
+.btn.danger {
+  background: transparent;
+  color: var(--nq-red);
+  border: 1px solid rgba(217, 68, 50, 0.4);
+}
+
+.btn + .btn {
+  margin-top: 10px;
+}
+
+/* --- preset chooser, the 60 second path --- */
+
+.preset {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: var(--nq-blue-raised);
+  border: 2px solid transparent;
+  border-radius: var(--radius-lg);
+  padding: 18px 20px;
+  margin-bottom: 12px;
+  color: var(--ink);
+  transition: border-color 0.15s ease;
+}
+
+.preset[aria-pressed="true"] {
+  border-color: var(--nq-gold);
+}
+
+.preset .title {
+  font-weight: 700;
+  font-size: 17px;
+  margin-bottom: 4px;
+}
+
+.preset .sub {
+  font-size: 14px;
+  color: var(--ink-dim);
+}
+
+/* --- split bar --- */
+
+.splitbar {
+  display: flex;
+  height: 10px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.25);
+  margin: 6px 0 18px;
+}
+
+.splitbar span {
+  display: block;
+  height: 100%;
+}
+
+/* --- recipient rows --- */
+
+.recipient {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.recipient:last-child {
+  border-bottom: 0;
+}
+
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.recipient .who {
+  flex: 1;
+  min-width: 0;
+}
+
+.recipient .who .name {
+  font-weight: 600;
+  font-size: 15px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.recipient .pct {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- inputs --- */
+
+label.field {
+  display: block;
+  margin-bottom: 14px;
+}
+
+label.field .label {
+  display: block;
+  margin-bottom: 6px;
+}
+
+input[type="text"],
+input[type="number"],
+input[type="date"] {
+  width: 100%;
+  min-height: 50px;
+  padding: 0 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--hairline);
+  background: rgba(0, 0, 0, 0.22);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 16px; /* 16px or iOS zooms the whole WebView on focus */
+}
+
+input:focus {
+  outline: 2px solid var(--nq-gold);
+  outline-offset: -1px;
+}
+
+input.mono {
+  font-family: var(--mono);
+  font-size: 14px;
+}
+
+/* --- QR --- */
+
+.qr {
+  background: #fff;
+  padding: 14px;
+  border-radius: var(--radius);
+  width: fit-content;
+  margin: 0 auto 16px;
+  line-height: 0;
+}
+
+.qr img,
+.qr canvas {
+  display: block;
+  width: 180px;
+  height: 180px;
+}
+
+/* --- pills and status --- */
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.09);
+  color: var(--ink-dim);
+}
+
+.pill.good {
+  background: rgba(33, 188, 165, 0.16);
+  color: var(--nq-green);
+}
+
+.pill.warn {
+  background: rgba(233, 178, 19, 0.16);
+  color: var(--nq-gold);
+}
+
+.pill.bad {
+  background: rgba(217, 68, 50, 0.16);
+  color: var(--nq-red);
+}
+
+/* --- tabbar --- */
+
+.tabbar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  background: var(--nq-blue-deep);
+  border-top: 1px solid var(--hairline);
+  padding-bottom: env(safe-area-inset-bottom);
+  z-index: 20;
+}
+
+.tabbar button {
+  flex: 1;
+  background: none;
+  color: var(--ink-faint);
+  padding: 11px 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.tabbar button[aria-selected="true"] {
+  color: var(--nq-gold);
+}
+
+.tabbar svg {
+  width: 22px;
+  height: 22px;
+}
+
+/* --- empty and error states --- */
+
+.empty {
+  text-align: center;
+  padding: 44px 20px;
+  color: var(--ink-faint);
+}
+
+.empty .big {
+  font-size: 40px;
+  margin-bottom: 12px;
+  opacity: 0.5;
+}
+
+.notice {
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.notice.error {
+  background: rgba(217, 68, 50, 0.14);
+  color: #ffb4a8;
+  border: 1px solid rgba(217, 68, 50, 0.3);
+}
+
+.notice.info {
+  background: rgba(5, 130, 202, 0.14);
+  color: #9ed8f7;
+  border: 1px solid rgba(5, 130, 202, 0.3);
+}
+
+/* --- toast --- */
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(78px + env(safe-area-inset-bottom));
+  transform: translateX(-50%) translateY(12px);
+  background: #fff;
+  color: #1a1a1a;
+  font-weight: 600;
+  font-size: 14px;
+  padding: 11px 20px;
+  border-radius: 999px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+  z-index: 40;
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.35);
+}
+
+.toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* --- spinner --- */
+
+.spinner {
+  width: 17px;
+  height: 17px;
+  border: 2px solid rgba(0, 0, 0, 0.22);
+  border-top-color: #1a1a1a;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+.btn.secondary .spinner,
+.centered .spinner {
+  border-color: var(--hairline);
+  border-top-color: var(--nq-gold);
+}
+
+.centered {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 64px 20px;
+  color: var(--ink-faint);
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
