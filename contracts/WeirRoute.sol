@@ -5,6 +5,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
+import {ERC2771Context} from "@openzeppelin/contracts/metatx/ERC2771Context.sol";
 
 interface IWeirIndex {
     function indexRecipients(address[] calldata accounts) external;
@@ -20,7 +21,7 @@ interface IWeirIndex {
 ///      nothing can execute on arrival. Instead `distribute` is permissionless:
 ///      a relayer normally calls it within seconds, but any recipient can call
 ///      it themselves, so funds are never trapped behind an off-chain service.
-contract WeirRoute is Initializable, ReentrancyGuard {
+contract WeirRoute is Initializable, ReentrancyGuard, ERC2771Context {
     using SafeERC20 for IERC20;
 
     uint256 public constant TOTAL_BPS = 10_000;
@@ -60,11 +61,15 @@ contract WeirRoute is Initializable, ReentrancyGuard {
     error NothingToClaim();
 
     modifier onlyOwner() {
-        if (msg.sender != owner) revert NotOwner();
+        if (_msgSender() != owner) revert NotOwner();
         _;
     }
 
-    constructor() {
+    /// @param forwarder the trusted ERC-2771 forwarder. Weir's audience holds
+    ///        stablecoins and no gas token, so every owner action has to work
+    ///        for someone with an empty POL balance. Immutable, which is what
+    ///        makes it survive being read through a minimal proxy.
+    constructor(address forwarder) ERC2771Context(forwarder) {
         // The implementation itself must never be initializable through a clone.
         _disableInitializers();
     }
@@ -152,11 +157,12 @@ contract WeirRoute is Initializable, ReentrancyGuard {
 
     /// @notice Withdraw funds a failed transfer left owed to you.
     function claim(address token) external nonReentrant {
-        uint256 amount = pending[token][msg.sender];
+        address claimant = _msgSender();
+        uint256 amount = pending[token][claimant];
         if (amount == 0) revert NothingToClaim();
-        pending[token][msg.sender] = 0;
-        IERC20(token).safeTransfer(msg.sender, amount);
-        emit Claimed(token, msg.sender, amount);
+        pending[token][claimant] = 0;
+        IERC20(token).safeTransfer(claimant, amount);
+        emit Claimed(token, claimant, amount);
     }
 
     /// @dev A recipient that reverts on receipt must not brick the whole split
@@ -171,6 +177,8 @@ contract WeirRoute is Initializable, ReentrancyGuard {
     }
 
     /// @dev External only so the call above can be wrapped in try/catch.
+    ///      Deliberately `msg.sender`, not `_msgSender()`: this must only ever
+    ///      be callable by this contract itself, never by a forwarded caller.
     function selfTransfer(address token, address to, uint256 amount) external {
         if (msg.sender != address(this)) revert NotSelf();
         IERC20(token).safeTransfer(to, amount);

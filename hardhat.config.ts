@@ -21,9 +21,10 @@ const config: HardhatUserConfig = {
   solidity: {
     version: "0.8.25",
     settings: {
-      // Paris keeps the bytecode portable across every EVM chain Nimiq Pay
-      // exposes, including the ones slower to adopt Cancun opcodes.
-      evmVersion: "paris",
+      // Cancun, because OpenZeppelin's ERC2771Forwarder uses `mcopy`. Every
+      // chain Nimiq Pay exposes supports Cancun opcodes now, Polygon since its
+      // Napoli upgrade, and Polygon is where Nimiq Pay actually holds USDT.
+      evmVersion: "cancun",
       optimizer: { enabled: true, runs: 200 },
     },
   },
@@ -44,7 +45,7 @@ const config: HardhatUserConfig = {
       chainId: 42161,
     },
     polygon: {
-      url: process.env.POLYGON_RPC_URL ?? "https://polygon-rpc.com",
+      url: process.env.POLYGON_RPC_URL ?? "https://polygon-bor-rpc.publicnode.com",
       accounts: loadDeployerKey(),
       chainId: 137,
     },

@@ -35,6 +35,23 @@ An ERC-20 transfer does not notify the contract that receives it. There is no ho
 
 So Weir does this instead. Your address is a contract that holds what arrives, and `distribute` is **permissionless**: anybody can call it. A relayer normally calls it within seconds, so it feels automatic. But your teammates can each trigger it themselves, from inside the app, which means your money never depends on our service being alive.
 
+### Nobody needs a gas token
+
+Nimiq Pay holds USDT on Polygon. Polygon charges gas in POL, and a Nimiq Pay
+user has no reason to hold any. Telling a freelancer in Lagos to go and acquire
+POL before they can be paid would lose most of them at the first step.
+
+So every user action in Weir is relayable. You sign a message, which is free,
+and the relayer submits it and pays the gas. Creating a route, changing your
+split, claiming, and withdrawing your savings all work with a completely empty
+wallet, and there is a test that proves it by zeroing an account's balance
+first.
+
+This uses OpenZeppelin's audited `ERC2771Forwarder`. The relayer pays but it
+cannot forge anything: the forwarder verifies your signature and appends your
+address, so a relayed call can never act as someone else. Direct calls still
+work normally if you would rather pay your own gas.
+
 ### When a payout fails
 
 A recipient contract cannot reject an ordinary token transfer, so the realistic failure is the token itself refusing. Real USDT can do this: Tether can freeze an address, and `transfer` then reverts.
@@ -48,6 +65,7 @@ If that happens to one recipient, everyone else still gets paid. The frozen shar
 | `WeirFactory` | Creates routes and vaults, and indexes them so the app can rebuild your state from chain alone, with no server |
 | `WeirRoute` | Your payment address. Holds the split rules and pays them out |
 | `WeirVault` | Savings. Locked until a date. The lock can be extended, never shortened |
+| `WeirForwarder` | Trusted ERC-2771 forwarder, so a user with no gas token can still act |
 
 Each user gets their own `WeirRoute` and `WeirVault` as [minimal proxies](https://eips.ethereum.org/EIPS/eip-1167), so creating one on a phone costs very little gas.
 
@@ -125,7 +143,10 @@ It is a convenience and never a dependency. Points worth knowing:
 npm test
 ```
 
-29 tests covering the split maths, rounding dust, permissionless distribution, a frozen recipient, mainnet style USDT that returns no bool, the savings lock, recipient discovery, and clone safety.
+33 tests covering the split maths, rounding dust, permissionless distribution,
+a frozen recipient, mainnet style USDT that returns no bool, the savings lock,
+recipient discovery, clone safety, and a user with a literally empty wallet
+creating a route, changing it, and withdrawing savings without ever holding gas.
 
 ## Status
 
@@ -135,7 +156,13 @@ out, nothing stranded, a teammate who owns nothing able to release their own
 share, and the relayer picking up an untriggered payment on its own and paying
 everybody their exact percentage.
 
-Not yet done: mainnet deployment.
+Target chain is **Polygon**, because that is where Nimiq Pay actually holds
+USDT. Verified on Polygon mainnet: USDT at `0xc2132D05D31c914a87C6611C10748AEb04B58e8F`,
+symbol USDT, 6 decimals.
+
+Not yet done: mainnet deployment, and wiring the app and relayer to the
+gasless path (the contracts support it and are tested, the UI still asks the
+user to send their own transaction).
 
 ## Licence
 

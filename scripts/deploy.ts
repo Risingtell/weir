@@ -19,11 +19,18 @@ async function main() {
     throw new Error("Deployer has no gas. Fund it before deploying.");
   }
 
-  const factory = await (await ethers.getContractFactory("WeirFactory")).deploy();
+  // The forwarder has to exist first: both implementations bake its address in
+  // as an immutable, which is what lets a clone read it.
+  const forwarder = await (await ethers.getContractFactory("WeirForwarder")).deploy();
+  await forwarder.waitForDeployment();
+  const forwarderAddress = await forwarder.getAddress();
+  console.log(`\nWeirForwarder:       ${forwarderAddress}`);
+
+  const factory = await (await ethers.getContractFactory("WeirFactory")).deploy(forwarderAddress);
   await factory.waitForDeployment();
   const factoryAddress = await factory.getAddress();
 
-  console.log(`\nWeirFactory:         ${factoryAddress}`);
+  console.log(`WeirFactory:         ${factoryAddress}`);
   console.log(`  routeImplementation: ${await factory.routeImplementation()}`);
   console.log(`  vaultImplementation: ${await factory.vaultImplementation()}`);
 
@@ -41,13 +48,13 @@ async function main() {
     console.log(`  minted 100,000 test USDT to the deployer`);
   }
 
-  patchConfig(net, factoryAddress, usdtAddress);
+  patchConfig(net, factoryAddress, usdtAddress, forwarderAddress);
 
   console.log(`\nDone. Update app/src/config.ts is handled automatically.`);
 }
 
 /** Rewrites the factory and usdt fields for this network in app/src/config.ts. */
-function patchConfig(net: string, factory: string, usdt: string | null) {
+function patchConfig(net: string, factory: string, usdt: string | null, forwarder: string) {
   const path = "app/src/config.ts";
   const key = net === "hardhat" ? "localhost" : net;
 
@@ -68,6 +75,7 @@ function patchConfig(net: string, factory: string, usdt: string | null) {
 
   let updated = match[1]
     .replace(/factory: [^,]+,/, `factory: "${factory}",`)
+    .replace(/forwarder: [^,]+,/, `forwarder: "${forwarder}",`)
     .replace(/usdt: [^,]+,/, usdt ? `usdt: "${usdt}",` : "$&");
 
   src = src.replace(block, updated);

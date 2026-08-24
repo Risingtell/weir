@@ -23,6 +23,8 @@ export interface ChainConfig {
   explorer: string;
   /** Weir factory, filled in per chain once deployed. */
   factory: `0x${string}` | null;
+  /** Trusted ERC-2771 forwarder, so users with no gas token can still act. */
+  forwarder: `0x${string}` | null;
   usdt: `0x${string}` | null;
   /** Expected decimals, confirmed on-chain before use. BNB's USDT is 18, not 6. */
   usdtDecimals: number;
@@ -36,8 +38,9 @@ export const CHAINS: Record<ChainKey, ChainConfig> = {
     name: "Localhost",
     rpcUrl: "http://127.0.0.1:8545",
     explorer: "http://127.0.0.1:8545",
-    factory: "0x0B306BF915C4d645ff596e518fAf3F9669b97016",
-    usdt: "0x959922bE3CAee4b8Cd9a407cc3ac1C251C2007B1",
+    factory: "0x7a2088a1bFc9d81c55368AE168C2C02570cB814F",
+    forwarder: "0x4A679253410272dd5232B3Ff7cF5dbB88f295319",
+    usdt: "0x09635F643e140090A9A8Dcd712eD6285858ceBef",
     usdtDecimals: 6,
     testnet: true,
   },
@@ -48,6 +51,7 @@ export const CHAINS: Record<ChainKey, ChainConfig> = {
     rpcUrl: "https://ethereum-sepolia-rpc.publicnode.com",
     explorer: "https://sepolia.etherscan.io",
     factory: null,
+    forwarder: null,
     usdt: null, // a mock USDT is deployed alongside the factory on testnet
     usdtDecimals: 6,
     testnet: true,
@@ -59,6 +63,7 @@ export const CHAINS: Record<ChainKey, ChainConfig> = {
     rpcUrl: "https://mainnet.base.org",
     explorer: "https://basescan.org",
     factory: null,
+    forwarder: null,
     usdt: "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2",
     usdtDecimals: 6,
     testnet: false,
@@ -70,6 +75,7 @@ export const CHAINS: Record<ChainKey, ChainConfig> = {
     rpcUrl: "https://arb1.arbitrum.io/rpc",
     explorer: "https://arbiscan.io",
     factory: null,
+    forwarder: null,
     usdt: "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9",
     usdtDecimals: 6,
     testnet: false,
@@ -78,9 +84,12 @@ export const CHAINS: Record<ChainKey, ChainConfig> = {
     key: "polygon",
     id: 137,
     name: "Polygon",
-    rpcUrl: "https://polygon-rpc.com",
+    // polygon-rpc.com returns "API key disabled" for unauthenticated callers,
+    // so it is not usable as a default. This one answers without a key.
+    rpcUrl: "https://polygon-bor-rpc.publicnode.com",
     explorer: "https://polygonscan.com",
     factory: null,
+    forwarder: null,
     usdt: "0xc2132D05D31c914a87C6611C10748AEb04B58e8F",
     usdtDecimals: 6,
     testnet: false,
@@ -92,6 +101,7 @@ export const CHAINS: Record<ChainKey, ChainConfig> = {
     rpcUrl: "https://mainnet.optimism.io",
     explorer: "https://optimistic.etherscan.io",
     factory: null,
+    forwarder: null,
     usdt: "0x94b008aA00579c1307B0EF2c499aD98a8ce58e58",
     usdtDecimals: 6,
     testnet: false,
@@ -103,6 +113,7 @@ export const CHAINS: Record<ChainKey, ChainConfig> = {
     rpcUrl: "https://bsc-dataseed.binance.org",
     explorer: "https://bscscan.com",
     factory: null,
+    forwarder: null,
     usdt: "0x55d398326f99059fF775485246999027B3197955",
     usdtDecimals: 18, // deliberately different from every other chain here
     testnet: false,
@@ -114,6 +125,7 @@ export const CHAINS: Record<ChainKey, ChainConfig> = {
     rpcUrl: "https://ethereum-rpc.publicnode.com",
     explorer: "https://etherscan.io",
     factory: null,
+    forwarder: null,
     usdt: "0xdAC17F958D2ee523a2206206994597C13D831ec7",
     usdtDecimals: 6,
     testnet: false,

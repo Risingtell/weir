@@ -2,6 +2,7 @@
 pragma solidity 0.8.25;
 
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
+import {ERC2771Context} from "@openzeppelin/contracts/metatx/ERC2771Context.sol";
 import {WeirRoute} from "./WeirRoute.sol";
 import {WeirVault} from "./WeirVault.sol";
 
@@ -10,7 +11,7 @@ import {WeirVault} from "./WeirVault.sol";
 /// @dev Minimal proxies keep deployment cheap enough that a new user creating a
 ///      route on a phone is not a barrier. The indexes exist so the mini app and
 ///      the relayer can rebuild a user's state from chain alone, with no server.
-contract WeirFactory {
+contract WeirFactory is ERC2771Context {
     address public immutable routeImplementation;
     address public immutable vaultImplementation;
 
@@ -32,31 +33,37 @@ contract WeirFactory {
     error SaveShareOutOfRange(uint96 saveBps);
     error NotAKnownRoute();
 
-    constructor() {
-        routeImplementation = address(new WeirRoute());
-        vaultImplementation = address(new WeirVault());
+    /// @param forwarder trusted ERC-2771 forwarder, shared with both
+    ///        implementations so every user action can be relayed. Weir's users
+    ///        hold stablecoins and no gas token, and asking them to go and
+    ///        acquire POL before their first action would lose most of them.
+    constructor(address forwarder) ERC2771Context(forwarder) {
+        routeImplementation = address(new WeirRoute(forwarder));
+        vaultImplementation = address(new WeirVault(forwarder));
     }
 
     function createRoute(WeirRoute.Share[] calldata shares) external returns (address route) {
+        address owner_ = _msgSender();
         route = Clones.clone(routeImplementation);
-        WeirRoute(route).initialize(msg.sender, shares);
+        WeirRoute(route).initialize(owner_, shares);
 
-        _routesOf[msg.sender].push(route);
+        _routesOf[owner_].push(route);
         _allRoutes.push(route);
         isRoute[route] = true;
         for (uint256 i; i < shares.length; ++i) {
             _index(shares[i].account, route);
         }
 
-        emit RouteCreated(route, msg.sender, shares);
+        emit RouteCreated(route, owner_, shares);
     }
 
     function createVault(uint64 unlockAt, string calldata goal) public returns (address vault) {
+        address owner_ = _msgSender();
         vault = Clones.clone(vaultImplementation);
-        WeirVault(vault).initialize(msg.sender, unlockAt, goal);
+        WeirVault(vault).initialize(owner_, unlockAt, goal);
 
-        _vaultsOf[msg.sender].push(vault);
-        emit VaultCreated(vault, msg.sender, unlockAt, goal);
+        _vaultsOf[owner_].push(vault);
+        emit VaultCreated(vault, owner_, unlockAt, goal);
     }
 
     /// @notice Open a savings vault and a route that feeds it, in one transaction.
@@ -74,6 +81,7 @@ contract WeirFactory {
     ) external returns (address route, address vault) {
         if (saveBps == 0 || saveBps >= 10_000) revert SaveShareOutOfRange(saveBps);
 
+        address owner_ = _msgSender();
         vault = createVault(unlockAt, goal);
 
         WeirRoute.Share[] memory shares = new WeirRoute.Share[](2);
@@ -81,15 +89,15 @@ contract WeirFactory {
         shares[1] = WeirRoute.Share({account: vault, bps: saveBps});
 
         route = Clones.clone(routeImplementation);
-        WeirRoute(route).initialize(msg.sender, shares);
+        WeirRoute(route).initialize(owner_, shares);
 
-        _routesOf[msg.sender].push(route);
+        _routesOf[owner_].push(route);
         _allRoutes.push(route);
         isRoute[route] = true;
         _index(spendTo, route);
         _index(vault, route);
 
-        emit RouteCreated(route, msg.sender, shares);
+        emit RouteCreated(route, owner_, shares);
     }
 
     /// @notice Called by a route when its rules change, so someone added to a

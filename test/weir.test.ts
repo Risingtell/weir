@@ -1,15 +1,65 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
-import { time } from "@nomicfoundation/hardhat-network-helpers";
+import { time, loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 import type { Signer } from "ethers";
 
 const USDT = (n: string) => ethers.parseUnits(n, 6);
 
 async function deployFixture() {
-  const [owner, alice, bob, carol, stranger] = await ethers.getSigners();
-  const factory = await (await ethers.getContractFactory("WeirFactory")).deploy();
+  const [owner, alice, bob, carol, stranger, relayer] = await ethers.getSigners();
+  const forwarder = await (await ethers.getContractFactory("WeirForwarder")).deploy();
+  await forwarder.waitForDeployment();
+  const factory = await (
+    await ethers.getContractFactory("WeirFactory")
+  ).deploy(await forwarder.getAddress());
   const usdt = await (await ethers.getContractFactory("MockUSDT")).deploy();
-  return { factory, usdt, owner, alice, bob, carol, stranger };
+  return { factory, usdt, forwarder, owner, alice, bob, carol, stranger, relayer };
+}
+
+/**
+ * Signs an ERC-2771 request so `from` can act without holding any gas, and
+ * submits it through `relayer`, who pays. This is the path a real Weir user
+ * takes: they hold USDT and no POL.
+ */
+async function relay(
+  forwarder: any,
+  relayer: Signer,
+  from: any,
+  to: string,
+  data: string,
+) {
+  const nonce = await forwarder.nonces(from.address);
+  const deadline = (await time.latest()) + 3600;
+  const gas = 1_000_000n;
+
+  const domain = {
+    name: "Weir",
+    version: "1",
+    chainId: (await ethers.provider.getNetwork()).chainId,
+    verifyingContract: await forwarder.getAddress(),
+  };
+  const types = {
+    ForwardRequest: [
+      { name: "from", type: "address" },
+      { name: "to", type: "address" },
+      { name: "value", type: "uint256" },
+      { name: "gas", type: "uint256" },
+      { name: "nonce", type: "uint256" },
+      { name: "deadline", type: "uint48" },
+      { name: "data", type: "bytes" },
+    ],
+  };
+  const request = {
+    from: from.address,
+    to,
+    value: 0n,
+    gas,
+    nonce,
+    deadline,
+    data,
+  };
+  const signature = await from.signTypedData(domain, types, request);
+  return forwarder.connect(relayer).execute({ ...request, signature });
 }
 
 function pickEvent(factory: any, receipt: any, name: string) {
@@ -39,7 +89,7 @@ async function makeVault(factory: any, signer: Signer, unlockAt: number, goal: s
 describe("Weir", () => {
   describe("route rules", () => {
     it("rejects shares that do not sum to 100 percent", async () => {
-      const { factory, alice, bob } = await deployFixture();
+      const { factory, alice, bob } = await loadFixture(deployFixture);
       const RouteF = await ethers.getContractFactory("WeirRoute");
       await expect(
         factory.createRoute([
@@ -50,13 +100,13 @@ describe("Weir", () => {
     });
 
     it("rejects an empty recipient list", async () => {
-      const { factory } = await deployFixture();
+      const { factory } = await loadFixture(deployFixture);
       const RouteF = await ethers.getContractFactory("WeirRoute");
       await expect(factory.createRoute([])).to.be.revertedWithCustomError(RouteF, "NoRecipients");
     });
 
     it("rejects a zero address and a zero share", async () => {
-      const { factory, alice } = await deployFixture();
+      const { factory, alice } = await loadFixture(deployFixture);
       const RouteF = await ethers.getContractFactory("WeirRoute");
       await expect(
         factory.createRoute([{ account: ethers.ZeroAddress, bps: 10000 }]),
@@ -70,7 +120,7 @@ describe("Weir", () => {
     });
 
     it("lets only the owner change the rules", async () => {
-      const { factory, owner, alice, bob, stranger } = await deployFixture();
+      const { factory, owner, alice, bob, stranger } = await loadFixture(deployFixture);
       const route = await makeRoute(factory, owner, [{ account: alice.address, bps: 10000 }]);
       await expect(
         route.connect(stranger).setRules([{ account: bob.address, bps: 10000 }]),
@@ -82,7 +132,7 @@ describe("Weir", () => {
 
   describe("distribution", () => {
     it("splits an incoming payment by the rules", async () => {
-      const { factory, usdt, owner, alice, bob, carol } = await deployFixture();
+      const { factory, usdt, owner, alice, bob, carol } = await loadFixture(deployFixture);
       const route = await makeRoute(factory, owner, [
         { account: alice.address, bps: 5000 },
         { account: bob.address, bps: 3000 },
@@ -100,7 +150,7 @@ describe("Weir", () => {
     });
 
     it("strands no dust when the split does not divide evenly", async () => {
-      const { factory, usdt, owner, alice, bob, carol } = await deployFixture();
+      const { factory, usdt, owner, alice, bob, carol } = await loadFixture(deployFixture);
       const route = await makeRoute(factory, owner, [
         { account: alice.address, bps: 3333 },
         { account: bob.address, bps: 3333 },
@@ -121,7 +171,7 @@ describe("Weir", () => {
     });
 
     it("can be triggered by anyone, so funds never depend on a relayer", async () => {
-      const { factory, usdt, owner, alice, stranger } = await deployFixture();
+      const { factory, usdt, owner, alice, stranger } = await loadFixture(deployFixture);
       const route = await makeRoute(factory, owner, [{ account: alice.address, bps: 10000 }]);
       await usdt.mint(await route.getAddress(), USDT("50"));
 
@@ -130,7 +180,7 @@ describe("Weir", () => {
     });
 
     it("reverts when there is nothing to distribute", async () => {
-      const { factory, usdt, owner, alice } = await deployFixture();
+      const { factory, usdt, owner, alice } = await loadFixture(deployFixture);
       const route = await makeRoute(factory, owner, [{ account: alice.address, bps: 10000 }]);
       await expect(route.distribute(await usdt.getAddress())).to.be.revertedWithCustomError(
         route,
@@ -139,7 +189,7 @@ describe("Weir", () => {
     });
 
     it("applies new rules to money that arrives after the change", async () => {
-      const { factory, usdt, owner, alice, bob } = await deployFixture();
+      const { factory, usdt, owner, alice, bob } = await loadFixture(deployFixture);
       const route = await makeRoute(factory, owner, [{ account: alice.address, bps: 10000 }]);
 
       await usdt.mint(await route.getAddress(), USDT("100"));
@@ -156,7 +206,7 @@ describe("Weir", () => {
 
   describe("when one payout fails", () => {
     it("still pays everyone else and sets the failed share aside", async () => {
-      const { factory, usdt, owner, alice, bob } = await deployFixture();
+      const { factory, usdt, owner, alice, bob } = await loadFixture(deployFixture);
       const route = await makeRoute(factory, owner, [
         { account: alice.address, bps: 5000 },
         { account: bob.address, bps: 5000 },
@@ -173,7 +223,7 @@ describe("Weir", () => {
     });
 
     it("lets that recipient claim once they are unblocked", async () => {
-      const { factory, usdt, owner, alice, bob } = await deployFixture();
+      const { factory, usdt, owner, alice, bob } = await loadFixture(deployFixture);
       const route = await makeRoute(factory, owner, [
         { account: alice.address, bps: 5000 },
         { account: bob.address, bps: 5000 },
@@ -190,7 +240,7 @@ describe("Weir", () => {
     });
 
     it("does not let anyone else claim that share", async () => {
-      const { factory, usdt, owner, alice, bob, stranger } = await deployFixture();
+      const { factory, usdt, owner, alice, bob, stranger } = await loadFixture(deployFixture);
       const route = await makeRoute(factory, owner, [
         { account: alice.address, bps: 5000 },
         { account: bob.address, bps: 5000 },
@@ -207,7 +257,7 @@ describe("Weir", () => {
 
   describe("tokens that do not return a bool", () => {
     it("handles mainnet style USDT through SafeERC20", async () => {
-      const { factory, owner, alice, bob } = await deployFixture();
+      const { factory, owner, alice, bob } = await loadFixture(deployFixture);
       const odd = await (await ethers.getContractFactory("MockNoReturnUSDT")).deploy();
       const route = await makeRoute(factory, owner, [
         { account: alice.address, bps: 2500 },
@@ -224,7 +274,7 @@ describe("Weir", () => {
 
   describe("vault", () => {
     it("refuses to unlock in the past", async () => {
-      const { factory } = await deployFixture();
+      const { factory } = await loadFixture(deployFixture);
       const VaultF = await ethers.getContractFactory("WeirVault");
       const past = (await time.latest()) - 1;
       await expect(factory.createVault(past, "rent")).to.be.revertedWithCustomError(
@@ -234,7 +284,7 @@ describe("Weir", () => {
     });
 
     it("holds funds until the unlock date, then releases them", async () => {
-      const { factory, usdt, owner } = await deployFixture();
+      const { factory, usdt, owner } = await loadFixture(deployFixture);
       const unlockAt = (await time.latest()) + 30 * 24 * 3600;
       const vault = await makeVault(factory, owner, unlockAt, "six months of runway");
 
@@ -251,7 +301,7 @@ describe("Weir", () => {
     });
 
     it("lets the owner extend the lock but never shorten it", async () => {
-      const { factory, owner } = await deployFixture();
+      const { factory, owner } = await loadFixture(deployFixture);
       const unlockAt = (await time.latest()) + 30 * 24 * 3600;
       const vault = await makeVault(factory, owner, unlockAt, "goal");
 
@@ -264,7 +314,7 @@ describe("Weir", () => {
     });
 
     it("does not let a stranger withdraw", async () => {
-      const { factory, usdt, owner, stranger } = await deployFixture();
+      const { factory, usdt, owner, stranger } = await loadFixture(deployFixture);
       const unlockAt = (await time.latest()) + 100;
       const vault = await makeVault(factory, owner, unlockAt, "goal");
 
@@ -278,7 +328,7 @@ describe("Weir", () => {
 
   describe("pay yourself first, end to end", () => {
     it("routes a slice of a client payment straight into the locked vault", async () => {
-      const { factory, usdt, owner, alice } = await deployFixture();
+      const { factory, usdt, owner, alice } = await loadFixture(deployFixture);
       const unlockAt = (await time.latest()) + 90 * 24 * 3600;
       const vault = await makeVault(factory, owner, unlockAt, "dollar savings");
 
@@ -299,7 +349,7 @@ describe("Weir", () => {
 
   describe("factory bookkeeping", () => {
     it("indexes routes by owner and by who gets paid", async () => {
-      const { factory, owner, alice, bob } = await deployFixture();
+      const { factory, owner, alice, bob } = await loadFixture(deployFixture);
       const route = await makeRoute(factory, owner, [
         { account: alice.address, bps: 6000 },
         { account: bob.address, bps: 4000 },
@@ -313,7 +363,7 @@ describe("Weir", () => {
     });
 
     it("pages through every route", async () => {
-      const { factory, owner, alice } = await deployFixture();
+      const { factory, owner, alice } = await loadFixture(deployFixture);
       for (let i = 0; i < 3; i++) {
         await makeRoute(factory, owner, [{ account: alice.address, bps: 10000 }]);
       }
@@ -325,7 +375,7 @@ describe("Weir", () => {
 
   describe("one tap setup", () => {
     it("opens the vault and the route that feeds it in a single transaction", async () => {
-      const { factory, usdt, owner, alice } = await deployFixture();
+      const { factory, usdt, owner, alice } = await loadFixture(deployFixture);
       const unlockAt = (await time.latest()) + 90 * 24 * 3600;
 
       const receipt = await (
@@ -358,7 +408,7 @@ describe("Weir", () => {
     });
 
     it("indexes the new route under both the spender and the vault", async () => {
-      const { factory, owner, alice } = await deployFixture();
+      const { factory, owner, alice } = await loadFixture(deployFixture);
       const unlockAt = (await time.latest()) + 30 * 24 * 3600;
       const receipt = await (
         await factory.createSavingsRoute(alice.address, 1000, unlockAt, "goal")
@@ -373,7 +423,7 @@ describe("Weir", () => {
     });
 
     it("refuses a savings slice of nothing or everything", async () => {
-      const { factory, alice } = await deployFixture();
+      const { factory, alice } = await loadFixture(deployFixture);
       const unlockAt = (await time.latest()) + 30 * 24 * 3600;
       await expect(
         factory.createSavingsRoute(alice.address, 0, unlockAt, "goal"),
@@ -386,7 +436,7 @@ describe("Weir", () => {
 
   describe("finding a split that pays you", () => {
     it("indexes someone added to the split after the route was created", async () => {
-      const { factory, owner, alice, bob, carol } = await deployFixture();
+      const { factory, owner, alice, bob, carol } = await loadFixture(deployFixture);
       const route = await makeRoute(factory, owner, [
         { account: alice.address, bps: 5000 },
         { account: bob.address, bps: 5000 },
@@ -407,7 +457,7 @@ describe("Weir", () => {
     });
 
     it("does not list the same route twice for one recipient", async () => {
-      const { factory, owner, alice, bob } = await deployFixture();
+      const { factory, owner, alice, bob } = await loadFixture(deployFixture);
       const route = await makeRoute(factory, owner, [
         { account: alice.address, bps: 5000 },
         { account: bob.address, bps: 5000 },
@@ -428,16 +478,98 @@ describe("Weir", () => {
     });
 
     it("refuses index writes from anything the factory did not create", async () => {
-      const { factory, alice, stranger } = await deployFixture();
+      const { factory, alice, stranger } = await loadFixture(deployFixture);
       await expect(
         factory.connect(stranger).indexRecipients([alice.address]),
       ).to.be.revertedWithCustomError(factory, "NotAKnownRoute");
     });
   });
 
+  describe("working with no gas at all", () => {
+    it("lets someone with an empty wallet create a route, paid for by a relayer", async () => {
+      const { factory, forwarder, alice, bob, relayer } = await loadFixture(deployFixture);
+
+      // Alice is a brand new Nimiq Pay user: stablecoins, no gas token.
+      // Give her literally nothing and prove she can still onboard.
+      await ethers.provider.send("hardhat_setBalance", [alice.address, "0x0"]);
+      expect(await ethers.provider.getBalance(alice.address)).to.equal(0n);
+
+      const data = factory.interface.encodeFunctionData("createRoute", [
+        [
+          { account: alice.address, bps: 7000 },
+          { account: bob.address, bps: 3000 },
+        ],
+      ]);
+
+      await relay(forwarder, relayer, alice, await factory.getAddress(), data);
+
+      // The route must belong to Alice, not to whoever paid the gas.
+      const routes = await factory.routesOf(alice.address);
+      expect(routes.length).to.equal(1);
+      const route = await ethers.getContractAt("WeirRoute", routes[0]);
+      expect(await route.owner()).to.equal(alice.address);
+      expect(await factory.routesOf(relayer.address)).to.deep.equal([]);
+      expect(await ethers.provider.getBalance(alice.address)).to.equal(0n);
+    });
+
+    it("lets her change her own split with no gas", async () => {
+      const { factory, forwarder, alice, bob, carol, relayer } = await loadFixture(deployFixture);
+      const route = await makeRoute(factory, alice, [{ account: alice.address, bps: 10000 }]);
+
+      await ethers.provider.send("hardhat_setBalance", [alice.address, "0x0"]);
+
+      const data = route.interface.encodeFunctionData("setRules", [
+        [
+          { account: bob.address, bps: 5000 },
+          { account: carol.address, bps: 5000 },
+        ],
+      ]);
+      await relay(forwarder, relayer, alice, await route.getAddress(), data);
+
+      const shares = await route.shares();
+      expect(shares[0].account).to.equal(bob.address);
+      expect(shares[1].account).to.equal(carol.address);
+    });
+
+    it("lets her withdraw her savings with no gas", async () => {
+      const { factory, usdt, forwarder, alice, relayer } = await loadFixture(deployFixture);
+      const unlockAt = (await time.latest()) + 100;
+      const vault = await makeVault(factory, alice, unlockAt, "goal");
+      await usdt.mint(await vault.getAddress(), USDT("75"));
+
+      await time.increaseTo(unlockAt + 1);
+      await ethers.provider.send("hardhat_setBalance", [alice.address, "0x0"]);
+
+      const data = vault.interface.encodeFunctionData("withdraw", [await usdt.getAddress()]);
+      await relay(forwarder, relayer, alice, await vault.getAddress(), data);
+
+      expect(await usdt.balanceOf(alice.address)).to.equal(USDT("75"));
+    });
+
+    it("does not let a relayed call impersonate someone else", async () => {
+      const { factory, forwarder, alice, bob, relayer } = await loadFixture(deployFixture);
+      const route = await makeRoute(factory, alice, [{ account: alice.address, bps: 10000 }]);
+
+      // Bob signs a request to change Alice's rules. He is not the owner, so
+      // the forwarded sender must be Bob and the call must be rejected.
+      const data = route.interface.encodeFunctionData("setRules", [
+        [{ account: bob.address, bps: 10000 }],
+      ]);
+
+      // The forwarder wraps the inner revert, so assert the property that
+      // actually matters: Bob cannot change Alice's rules, and the split is
+      // untouched afterwards.
+      await expect(relay(forwarder, relayer, bob, await route.getAddress(), data)).to.be.reverted;
+
+      const shares = await route.shares();
+      expect(shares.length).to.equal(1);
+      expect(shares[0].account).to.equal(alice.address);
+    });
+  });
+
   describe("clone safety", () => {
     it("cannot initialize the implementation itself", async () => {
-      const { factory, alice } = await deployFixture();
+      const { factory, alice } = await loadFixture(deployFixture);
       const impl = await ethers.getContractAt("WeirRoute", await factory.routeImplementation());
       await expect(
         impl.initialize(alice.address, [{ account: alice.address, bps: 10000 }]),
@@ -445,7 +577,7 @@ describe("Weir", () => {
     });
 
     it("cannot re-initialize a live route", async () => {
-      const { factory, owner, alice, stranger } = await deployFixture();
+      const { factory, owner, alice, stranger } = await loadFixture(deployFixture);
       const route = await makeRoute(factory, owner, [{ account: alice.address, bps: 10000 }]);
       await expect(
         route
@@ -455,7 +587,7 @@ describe("Weir", () => {
     });
 
     it("refuses a selfTransfer call from outside the contract", async () => {
-      const { factory, usdt, owner, alice, stranger } = await deployFixture();
+      const { factory, usdt, owner, alice, stranger } = await loadFixture(deployFixture);
       const route = await makeRoute(factory, owner, [{ account: alice.address, bps: 10000 }]);
       await usdt.mint(await route.getAddress(), USDT("10"));
       await expect(

@@ -5,6 +5,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
+import {ERC2771Context} from "@openzeppelin/contracts/metatx/ERC2771Context.sol";
 
 /// @title WeirVault
 /// @notice A savings address you cannot raid on a bad day.
@@ -14,7 +15,7 @@ import {Initializable} from "@openzeppelin/contracts/proxy/utils/Initializable.s
 ///      lands here before it ever reaches a spending wallet. The lock can be
 ///      extended but never shortened, which is the whole point: the commitment
 ///      has to outlast the moment you want to break it.
-contract WeirVault is Initializable, ReentrancyGuard {
+contract WeirVault is Initializable, ReentrancyGuard, ERC2771Context {
     using SafeERC20 for IERC20;
 
     address public owner;
@@ -33,11 +34,13 @@ contract WeirVault is Initializable, ReentrancyGuard {
     error NothingToWithdraw();
 
     modifier onlyOwner() {
-        if (msg.sender != owner) revert NotOwner();
+        if (_msgSender() != owner) revert NotOwner();
         _;
     }
 
-    constructor() {
+    /// @param forwarder trusted ERC-2771 forwarder, so withdrawing your savings
+    ///        never requires you to hold a gas token first.
+    constructor(address forwarder) ERC2771Context(forwarder) {
         _disableInitializers();
     }
 
