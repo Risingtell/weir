@@ -3,14 +3,14 @@ import type { Address } from "viem";
 import { isAddress, getAddress } from "viem";
 import "./styles.css";
 import { Weir, hasWallet, NotInNimiqPayError, UnsupportedChainError } from "./chain";
-import type { RouteView, VaultView, Share } from "./chain";
+import type { RouteView, VaultView, Share, ActivityItem } from "./chain";
 import { BPS_TOTAL } from "./config";
 
 /** Where this mini app is hosted. Used to build the Nimiq Pay deeplink. */
 const APP_HOST = window.location.host;
 const DEEPLINK = `https://nimpay.app/miniapps/open/${APP_HOST}`;
 
-type Tab = "link" | "splits" | "savings";
+type Tab = "link" | "activity" | "splits" | "savings";
 
 interface State {
   phase: "boot" | "welcome" | "setup" | "ready" | "error";
@@ -22,9 +22,13 @@ interface State {
   vault: VaultView | null;
   payingMe: RouteView[];
   pendingMine: bigint;
+  activity: ActivityItem[];
+  activityLoaded: boolean;
   qr: string | null;
   /** Draft state for the setup screen. */
   draft: { preset: "self" | "team"; savePct: number; months: number; goal: string; team: Share[] };
+  /** Whether the savings tab is showing the extend-the-lock panel. */
+  extending: boolean;
 }
 
 const state: State = {
@@ -37,8 +41,11 @@ const state: State = {
   vault: null,
   payingMe: [],
   pendingMine: 0n,
+  activity: [],
+  activityLoaded: false,
   qr: null,
   draft: { preset: "self", savePct: 20, months: 3, goal: "", team: [] },
+  extending: false,
 };
 
 const root = document.getElementById("app")!;
@@ -110,6 +117,13 @@ function daysUntil(ts: number) {
   return Math.max(0, Math.ceil((ts * 1000 - Date.now()) / 86_400_000));
 }
 
+/** yyyy-mm-dd in local time, which is what <input type="date"> expects. */
+function dateInputValue(ts: number) {
+  const d = new Date(ts * 1000);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 // --- data loading ---
 
 async function refresh() {
@@ -134,6 +148,24 @@ async function refresh() {
   state.qr = state.route
     ? await QRCode.toDataURL(state.route.address, { margin: 0, width: 360, color: { dark: "#1f2348", light: "#ffffff" } })
     : null;
+
+  // Scanning logs is the slowest thing here, so never let it hold up the
+  // balances. It fills in and re-renders on its own.
+  const routeAddresses = [
+    ...(state.route ? [state.route.address] : []),
+    ...state.payingMe.map((r) => r.address),
+  ];
+  const vaultAddresses = state.vault ? [state.vault.address] : [];
+  void w
+    .readActivity({ routes: routeAddresses, vaults: vaultAddresses })
+    .then((items) => {
+      state.activity = items;
+      state.activityLoaded = true;
+      if (state.phase === "ready") render();
+    })
+    .catch(() => {
+      state.activityLoaded = true;
+    });
 
   // Being paid by someone else's route is reason enough to have a home screen.
   // Sending a teammate into a setup wizard when money is already waiting for
@@ -175,6 +207,7 @@ function tabbar() {
 
   return `<nav class="tabbar">
     ${item("link", "Get paid", '<path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.5 1.5"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.5-1.5"/>')}
+    ${item("activity", "Activity", '<path d="M3 12h4l3 8 4-16 3 8h4"/>')}
     ${item("splits", "Splits", '<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/>')}
     ${item("savings", "Savings", '<rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>')}
   </nav>`;
@@ -366,6 +399,100 @@ function linkTab() {
   `;
 }
 
+function relativeTime(ts?: number) {
+  if (!ts) return "";
+  const secs = Math.max(0, Math.floor(Date.now() / 1000) - ts);
+  if (secs < 60) return "just now";
+  if (secs < 3600) return `${Math.floor(secs / 60)}m ago`;
+  if (secs < 86400) return `${Math.floor(secs / 3600)}h ago`;
+  if (secs < 604800) return `${Math.floor(secs / 86400)}d ago`;
+  return new Date(ts * 1000).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+}
+
+function activityTab() {
+  const w = state.weir!;
+
+  if (!state.activityLoaded) {
+    return `
+      <h1>Activity</h1>
+      <div class="centered"><div class="spinner"></div><div>Reading the chain</div></div>`;
+  }
+
+  if (!state.activity.length) {
+    return `
+      <h1>Activity</h1>
+      <div class="empty">
+        <div class="big">〰</div>
+        <p>Nothing yet. As soon as someone pays your address, every split shows up here.</p>
+      </div>`;
+  }
+
+  const meLower = w.account.toLowerCase();
+  const vaultLower = state.vault?.address.toLowerCase();
+
+  const rows = state.activity
+    .map((a) => {
+      const to = a.counterparty?.toLowerCase();
+      const isMe = to === meLower;
+      const isVault = to === vaultLower;
+
+      let title: string;
+      let colour: string;
+
+      switch (a.kind) {
+        case "split":
+          title = "Payment arrived and was split";
+          colour = "var(--nq-gold)";
+          break;
+        case "received":
+          title = isMe ? "Paid to you" : isVault ? "Into your savings" : `Paid to ${short(a.counterparty ?? "")}`;
+          colour = isVault ? "var(--nq-green)" : isMe ? "var(--nq-green)" : "var(--nq-blue-raised)";
+          break;
+        case "deferred":
+          title = `Set aside for ${isMe ? "you" : short(a.counterparty ?? "")}, transfer failed`;
+          colour = "var(--nq-red)";
+          break;
+        case "claimed":
+          title = isMe ? "You claimed a set-aside share" : `${short(a.counterparty ?? "")} claimed theirs`;
+          colour = "var(--nq-green)";
+          break;
+        case "withdrawn":
+          title = "Withdrawn from savings";
+          colour = "var(--nq-orange)";
+          break;
+        case "relocked":
+          title = a.detail ? `Savings locked until ${humanDate(a.detail)}` : "Savings locked for longer";
+          colour = "var(--nq-blue)";
+          break;
+      }
+
+      return `
+        <div class="recipient">
+          <span class="dot" style="background:${colour}"></span>
+          <div class="who">
+            <div class="name">${esc(title)}</div>
+            <div class="label">${esc(relativeTime(a.timestamp))}</div>
+          </div>
+          <div class="pct">${a.hasAmount ? w.format(a.amount) : ""}</div>
+        </div>`;
+    })
+    .join("");
+
+  // A split emits one Distributed plus one Paid per recipient, so the same
+  // money legitimately appears more than once. Say so rather than let it look
+  // like double counting.
+  return `
+    <h1>Activity</h1>
+    <p class="lede">Everything that has moved through your addresses.</p>
+    <div class="card">${rows}</div>
+    <div class="card flat">
+      <p style="margin:0" class="label">
+        A single payment shows as one arrival plus one line per person paid, so
+        the same money appears more than once on purpose.
+      </p>
+    </div>`;
+}
+
 function splitsTab() {
   const w = state.weir!;
   const r = state.route;
@@ -472,7 +599,22 @@ function savingsTab() {
                deliberately no way to bring it closer.
              </p>
            </div>
-           <button class="btn secondary" data-act="extend">Lock it for longer</button>`
+           ${
+             state.extending
+               ? `<div class="card">
+                    <label class="field">
+                      <span class="label">Keep it locked until</span>
+                      <input type="date" id="newUnlock"
+                             min="${dateInputValue(v.unlockAt + 86_400)}"
+                             value="${dateInputValue(v.unlockAt + 90 * 86_400)}" />
+                    </label>
+                    <button class="btn" data-act="extend-confirm" ${state.busy ? "disabled" : ""}>
+                      ${state.busy === "extend" ? '<span class="spinner"></span> Extending' : "Confirm"}
+                    </button>
+                    <button class="btn ghost" data-act="extend-cancel">Cancel</button>
+                  </div>`
+               : `<button class="btn secondary" data-act="extend">Lock it for longer</button>`
+           }`
         : `<button class="btn" data-act="withdraw" ${state.busy ? "disabled" : ""}>
              ${state.busy === "withdraw" ? '<span class="spinner"></span> Withdrawing' : "Withdraw everything"}
            </button>`
@@ -487,7 +629,10 @@ function savingsTab() {
 
 function readyScreen() {
   const body =
-    state.tab === "link" ? linkTab() : state.tab === "splits" ? splitsTab() : savingsTab();
+    state.tab === "link" ? linkTab()
+    : state.tab === "activity" ? activityTab()
+    : state.tab === "splits" ? splitsTab()
+    : savingsTab();
   const err = state.error ? `<div class="notice error">${esc(state.error)}</div>` : "";
   return chrome(err + body, { tabs: true });
 }
@@ -759,8 +904,41 @@ root.addEventListener("click", async (ev) => {
       break;
 
     case "extend":
-      toast("Coming in the next build");
+      state.extending = true;
+      render();
       break;
+
+    case "extend-cancel":
+      state.extending = false;
+      render();
+      break;
+
+    case "extend-confirm": {
+      const input = document.getElementById("newUnlock") as HTMLInputElement | null;
+      const v = state.vault!;
+      const chosen = input?.value ? Math.floor(new Date(input.value).getTime() / 1000) : 0;
+
+      if (!chosen) {
+        state.error = "Pick a date first.";
+        render();
+        break;
+      }
+      // The contract rejects this too, but failing here costs nothing and
+      // explains itself better than a reverted transaction would.
+      if (chosen <= v.unlockAt) {
+        state.error = `That is not later than ${humanDate(v.unlockAt)}. The lock can only move further out.`;
+        render();
+        break;
+      }
+
+      await withBusy("extend", async () => {
+        await w!.extendLock(v.address, chosen);
+        state.extending = false;
+        await refresh();
+        toast("Locked for longer");
+      });
+      break;
+    }
   }
 });
 

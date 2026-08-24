@@ -1,4 +1,5 @@
 import {
+  parseAbiItem,
   createPublicClient,
   createWalletClient,
   custom,
@@ -54,6 +55,25 @@ export interface VaultView {
   goal: string;
   locked: boolean;
   balance: bigint;
+}
+
+export type ActivityKind = "received" | "split" | "deferred" | "claimed" | "withdrawn" | "relocked";
+
+export interface ActivityItem {
+  kind: ActivityKind;
+  /** The contract the event came from. */
+  source: Address;
+  /** Who the money went to, where the event names one. */
+  counterparty?: Address;
+  amount: bigint;
+  /** Some entries record a decision rather than a movement, and show no amount. */
+  hasAmount: boolean;
+  /** For "relocked", the new unlock date in unix seconds. */
+  detail?: number;
+  blockNumber: bigint;
+  txHash: `0x${string}`;
+  /** Unix seconds. Resolved separately, since logs do not carry a timestamp. */
+  timestamp?: number;
 }
 
 export interface TokenInfo {
@@ -225,6 +245,126 @@ export class Weir {
     })) as bigint;
   }
 
+  // --- activity ---
+
+  /**
+   * Reads what actually happened from chain events.
+   *
+   * Logs carry no timestamp, and public RPCs cap how many blocks a single
+   * `getLogs` may span, so this walks backwards in chunks and shrinks the chunk
+   * when a provider rejects the range. It stops once it has enough rows or runs
+   * out of lookback, rather than trying to reach genesis.
+   */
+  async readActivity(
+    sources: { routes: Address[]; vaults: Address[] },
+    opts: { limit?: number; maxLookback?: bigint } = {},
+  ): Promise<ActivityItem[]> {
+    const limit = opts.limit ?? 40;
+    const maxLookback = opts.maxLookback ?? 2_000_000n;
+    const all = [...sources.routes, ...sources.vaults];
+    if (!all.length) return [];
+
+    const latest = await this.pub.getBlockNumber();
+    const floor = latest > maxLookback ? latest - maxLookback : 0n;
+
+    const events = [
+      parseAbiItem("event Paid(address indexed token, address indexed to, uint256 amount)"),
+      parseAbiItem("event Distributed(address indexed token, uint256 total)"),
+      parseAbiItem("event PaymentDeferred(address indexed token, address indexed to, uint256 amount)"),
+      parseAbiItem("event Claimed(address indexed token, address indexed to, uint256 amount)"),
+      parseAbiItem("event Withdrawn(address indexed token, address indexed to, uint256 amount)"),
+      parseAbiItem("event LockExtended(uint64 previousUnlockAt, uint64 newUnlockAt)"),
+    ];
+
+    const items: ActivityItem[] = [];
+    let chunk = 50_000n;
+    let to = latest;
+
+    while (to > floor && items.length < limit) {
+      const from = to - chunk > floor ? to - chunk : floor;
+      try {
+        const batches = await Promise.all(
+          events.map((event) =>
+            this.pub.getLogs({ address: all, event, fromBlock: from, toBlock: to }).catch(() => []),
+          ),
+        );
+
+        for (const logs of batches) {
+          for (const log of logs as any[]) {
+            const name = log.eventName as string;
+
+            if (name === "LockExtended") {
+              items.push({
+                kind: "relocked",
+                source: log.address as Address,
+                amount: 0n,
+                hasAmount: false,
+                detail: Number(log.args?.newUnlockAt ?? 0n),
+                blockNumber: log.blockNumber as bigint,
+                txHash: log.transactionHash as `0x${string}`,
+              });
+              continue;
+            }
+
+            // Only this token. A route can hold anything someone sends it.
+            if (log.args?.token?.toLowerCase() !== this.token.address.toLowerCase()) continue;
+
+            const kind: ActivityKind =
+              name === "Distributed" ? "split"
+              : name === "PaymentDeferred" ? "deferred"
+              : name === "Claimed" ? "claimed"
+              : name === "Withdrawn" ? "withdrawn"
+              : "received";
+
+            items.push({
+              kind,
+              source: log.address as Address,
+              counterparty: log.args?.to as Address | undefined,
+              amount: (log.args?.amount ?? log.args?.total ?? 0n) as bigint,
+              hasAmount: true,
+              blockNumber: log.blockNumber as bigint,
+              txHash: log.transactionHash as `0x${string}`,
+            });
+          }
+        }
+      } catch {
+        // Provider refused the range. Halve it and retry the same window.
+        if (chunk > 1_000n) {
+          chunk = chunk / 2n;
+          continue;
+        }
+        break;
+      }
+
+      if (from === floor) break;
+      to = from - 1n;
+    }
+
+    items.sort((a, b) => Number(b.blockNumber - a.blockNumber));
+    const page = items.slice(0, limit);
+    await this.attachTimestamps(page);
+    return page;
+  }
+
+  /** Fills in block times, fetching each distinct block only once. */
+  private async attachTimestamps(items: ActivityItem[]): Promise<void> {
+    const blocks = [...new Set(items.map((i) => i.blockNumber))];
+    const times = new Map<bigint, number>();
+
+    await Promise.all(
+      blocks.map(async (blockNumber) => {
+        try {
+          const block = await this.pub.getBlock({ blockNumber });
+          times.set(blockNumber, Number(block.timestamp));
+        } catch {
+          /* a missing timestamp is not worth failing the whole view over */
+        }
+      }),
+    );
+
+    for (const item of items) item.timestamp = times.get(item.blockNumber);
+  }
+
   // --- writes ---
 
   private async send(hash: `0x${string}`): Promise<void> {
@@ -312,6 +452,18 @@ export class Weir {
       abi: weirrouteAbi,
       functionName: "claim",
       args: [this.token.address],
+      account: this.account,
+      chain: null,
+    });
+    await this.send(hash);
+  }
+
+  async extendLock(vault: Address, newUnlockAt: number): Promise<void> {
+    const hash = await this.wallet.writeContract({
+      address: vault,
+      abi: weirvaultAbi,
+      functionName: "extendLock",
+      args: [BigInt(newUnlockAt)],
       account: this.account,
       chain: null,
     });

@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#1f2348" />
+    <title>Weir capability probe</title>
+    <style>
+      /*
+       * Deliberately dependency-free and build-free. This page exists to find
+       * out what Nimiq Pay actually supports, so it must not be able to fail
+       * for any reason other than the thing it is measuring.
+       */
+      :root {
+        --blue: #1f2348;
+        --raised: #262a52;
+        --gold: #e9b213;
+        --green: #21bca5;
+        --red: #d94432;
+        --dim: rgba(255, 255, 255, 0.6);
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 16px 14px 60px;
+        background: var(--blue);
+        color: #fff;
+        font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      }
+      h1 { font-size: 20px; margin: 0 0 4px; }
+      .sub { color: var(--dim); font-size: 13px; margin-bottom: 18px; }
+      h2 {
+        font-size: 12px; text-transform: uppercase; letter-spacing: 0.09em;
+        color: rgba(255, 255, 255, 0.4); margin: 24px 0 8px;
+      }
+      .row {
+        background: var(--raised); border-radius: 10px;
+        padding: 11px 13px; margin-bottom: 7px;
+      }
+      .row .k { font-weight: 700; font-size: 14px; margin-bottom: 3px; }
+      .row .v {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12px; color: var(--dim); word-break: break-all; white-space: pre-wrap;
+      }
+      .tag {
+        display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 7px;
+        border-radius: 99px; margin-left: 6px; vertical-align: middle;
+      }
+      .yes { background: rgba(33, 188, 165, 0.2); color: var(--green); }
+      .no { background: rgba(217, 68, 50, 0.2); color: #ff9c8e; }
+      .wait { background: rgba(255, 255, 255, 0.12); color: var(--dim); }
+      button {
+        width: 100%; min-height: 48px; margin-bottom: 8px; border: 0; border-radius: 10px;
+        background: var(--gold); color: #1a1a1a; font-size: 15px; font-weight: 700;
+        font-family: inherit;
+      }
+      button.sec { background: var(--raised); color: #fff; border: 1px solid rgba(255,255,255,.14); }
+      .note {
+        background: rgba(233, 178, 19, 0.12); border: 1px solid rgba(233, 178, 19, 0.3);
+        color: #f3d78a; border-radius: 10px; padding: 11px 13px; font-size: 13px; margin-bottom: 14px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Weir capability probe</h1>
+    <div class="sub">Open this inside Nimiq Pay. It changes nothing and spends nothing on its own.</div>
+
+    <h2>Read only, ran automatically</h2>
+    <div id="auto"></div>
+
+    <h2>These each ask you to approve something</h2>
+    <div class="note">
+      Every button below triggers one Nimiq Pay confirmation. Nothing is sent to
+      the blockchain except where the button says so, and that one costs only gas.
+    </div>
+    <button id="btn-typed">Test eth_signTypedData_v4</button>
+    <button id="btn-personal" class="sec">Test personal_sign</button>
+    <button id="btn-switch" class="sec">Test switch to Polygon</button>
+    <button id="btn-device" class="sec">Test device identifier</button>
+    <button id="btn-send" class="sec">Send a 0 value transaction to yourself</button>
+    <div id="manual"></div>
+
+    <h2>Results</h2>
+    <button id="btn-copy">Copy all results as text</button>
+    <div class="row"><div class="v" id="dump">…</div></div>
+
+    <script>
+      var results = {};
+      var POLYGON_USDT = "0xc2132D05D31c914a87C6611C10748AEb04B58e8F";
+
+      function el(id) { return document.getElementById(id); }
+
+      function put(where, key, value, state) {
+        results[key] = value;
+        var box = el(where);
+        var existing = document.getElementById("row-" + key);
+        var tag = state === undefined ? "" :
+          '<span class="tag ' + (state ? "yes" : "no") + '">' + (state ? "YES" : "NO") + "</span>";
+        var html = '<div class="k">' + key + tag + '</div><div class="v">' +
+          String(value).replace(/</g, "&lt;") + "</div>";
+        if (existing) { existing.innerHTML = html; }
+        else {
+          var d = document.createElement("div");
+          d.className = "row"; d.id = "row-" + key; d.innerHTML = html;
+          box.appendChild(d);
+        }
+        renderDump();
+      }
+
+      function renderDump() { el("dump").textContent = JSON.stringify(results, null, 2); }
+
+      function err(e) {
+        if (!e) return "unknown error";
+        return (e.code !== undefined ? "[" + e.code + "] " : "") + (e.message || String(e));
+      }
+
+      function eth() { return window.ethereum; }
+
+      async function req(method, params) {
+        if (!eth()) throw new Error("window.ethereum is not present");
+        return await eth().request({ method: method, params: params || [] });
+      }
+
+      // --- automatic, read only ---
+
+      // Split into two independent halves. The account prompt blocks until the
+      // user answers it, and if the Nimiq checks sat behind it a denied or
+      // ignored prompt would hide half the results. This page gets opened once,
+      // so it has to report everything it can regardless.
+
+      function runEnvironment() {
+        put("auto", "userAgent", navigator.userAgent);
+        put("auto", "window.ethereum", !!window.ethereum, !!window.ethereum);
+        put("auto", "window.nimiq", !!window.nimiq, !!window.nimiq);
+        put("auto", "window.nimiqPay", !!window.nimiqPay, !!window.nimiqPay);
+        put("auto", "nimiqPay.language",
+          (window.nimiqPay && window.nimiqPay.language) || "not exposed");
+      }
+
+      async function runEvm() {
+        try {
+          var chainId = await req("eth_chainId");
+          put("auto", "eth_chainId", chainId + "  (decimal " + parseInt(chainId, 16) + ")", true);
+        } catch (e) { put("auto", "eth_chainId", err(e), false); }
+
+        var accounts = null;
+        put("auto", "eth_requestAccounts", "waiting for you to approve…", undefined);
+        try {
+          accounts = await req("eth_requestAccounts");
+          put("auto", "eth_requestAccounts", JSON.stringify(accounts), true);
+        } catch (e) { put("auto", "eth_requestAccounts", err(e), false); return; }
+
+        if (!accounts || !accounts[0]) return;
+
+        try {
+          var bal = await req("eth_getBalance", [accounts[0], "latest"]);
+          var wei = BigInt(bal);
+          put("auto", "native gas balance",
+            bal + "  (" + (Number(wei) / 1e18).toFixed(6) + " native)", wei > 0n);
+        } catch (e) { put("auto", "native gas balance", err(e), false); }
+
+        try {
+          var data = "0x70a08231000000000000000000000000" + accounts[0].slice(2);
+          var raw = await req("eth_call", [{ to: POLYGON_USDT, data: data }, "latest"]);
+          // Empty returndata means there is no contract at that address on this
+          // chain, which tells us we are not on Polygon. That is a useful
+          // answer, not an error, and BigInt("0x") would throw on it.
+          if (!raw || raw === "0x") {
+            put("auto", "USDT balance (Polygon contract)",
+              "no contract at " + POLYGON_USDT + " on this chain, so this is not Polygon", false);
+          } else {
+            var units = BigInt(raw);
+            put("auto", "USDT balance (Polygon contract)",
+              raw + "  (" + (Number(units) / 1e6).toFixed(2) + " USDT)", true);
+          }
+        } catch (e) { put("auto", "USDT balance (Polygon contract)", err(e), false); }
+
+        try {
+          var gas = await req("eth_estimateGas", [{
+            from: accounts[0], to: POLYGON_USDT,
+            data: "0x70a08231000000000000000000000000" + accounts[0].slice(2)
+          }]);
+          put("auto", "eth_estimateGas on a contract", gas, true);
+        } catch (e) { put("auto", "eth_estimateGas on a contract", err(e), false); }
+      }
+
+      async function runNimiq() {
+        // The SDK's init() only waits for this object, so poll for it directly
+        // rather than pulling in a bundled dependency that could itself fail.
+        var nimiq = window.nimiq;
+        for (var i = 0; i < 30 && !nimiq; i++) {
+          await new Promise(function (r) { setTimeout(r, 100); });
+          nimiq = window.nimiq;
+        }
+        put("auto", "nimiq provider after 3s wait", !!nimiq, !!nimiq);
+        if (!nimiq) return;
+
+        try { put("auto", "nimiq.listAccounts", JSON.stringify(await nimiq.listAccounts()), true); }
+        catch (e) { put("auto", "nimiq.listAccounts", err(e), false); }
+        try { put("auto", "nimiq.isConsensusEstablished", await nimiq.isConsensusEstablished(), true); }
+        catch (e) { put("auto", "nimiq.isConsensusEstablished", err(e), false); }
+        try { put("auto", "nimiq.getBlockNumber", await nimiq.getBlockNumber(), true); }
+        catch (e) { put("auto", "nimiq.getBlockNumber", err(e), false); }
+      }
+
+      async function runAuto() {
+        runEnvironment();
+        // Deliberately not awaited in sequence: neither half may block the other.
+        await Promise.allSettled([runEvm(), runNimiq()]);
+      }
+
+      // --- opt in, each prompts once ---
+
+      async function currentAccount() {
+        var a = await req("eth_requestAccounts");
+        return a[0];
+      }
+
+      el("btn-typed").onclick = async function () {
+        put("manual", "eth_signTypedData_v4", "waiting for approval…", undefined);
+        try {
+          var from = await currentAccount();
+          var chainId = parseInt(await req("eth_chainId"), 16);
+          // Exactly the shape ERC-2771 relaying needs, so a pass here means the
+          // gasless design works as built.
+          var payload = {
+            types: {
+              EIP712Domain: [
+                { name: "name", type: "string" },
+                { name: "version", type: "string" },
+                { name: "chainId", type: "uint256" },
+                { name: "verifyingContract", type: "address" }
+              ],
+              ForwardRequest: [
+                { name: "from", type: "address" },
+                { name: "to", type: "address" },
+                { name: "value", type: "uint256" },
+                { name: "gas", type: "uint256" },
+                { name: "nonce", type: "uint256" },
+                { name: "deadline", type: "uint48" },
+                { name: "data", type: "bytes" }
+              ]
+            },
+            primaryType: "ForwardRequest",
+            domain: {
+              name: "Weir", version: "1", chainId: chainId,
+              verifyingContract: POLYGON_USDT
+            },
+            message: {
+              from: from, to: POLYGON_USDT, value: "0", gas: "200000",
+              nonce: "0", deadline: "4102444800", data: "0x"
+            }
+          };
+          var sig = await req("eth_signTypedData_v4", [from, JSON.stringify(payload)]);
+          put("manual", "eth_signTypedData_v4", sig, true);
+        } catch (e) { put("manual", "eth_signTypedData_v4", err(e), false); }
+      };
+
+      el("btn-personal").onclick = async function () {
+        put("manual", "personal_sign", "waiting for approval…", undefined);
+        try {
+          var from = await currentAccount();
+          var msg = "0x" + Array.from(new TextEncoder().encode("Weir probe"))
+            .map(function (b) { return b.toString(16).padStart(2, "0"); }).join("");
+          var sig = await req("personal_sign", [msg, from]);
+          put("manual", "personal_sign", sig, true);
+        } catch (e) { put("manual", "personal_sign", err(e), false); }
+      };
+
+      el("btn-switch").onclick = async function () {
+        put("manual", "wallet_switchEthereumChain", "waiting…", undefined);
+        try {
+          await req("wallet_switchEthereumChain", [{ chainId: "0x89" }]);
+          var now = await req("eth_chainId");
+          put("manual", "wallet_switchEthereumChain", "ok, now on " + now, true);
+        } catch (e) { put("manual", "wallet_switchEthereumChain", err(e), false); }
+      };
+
+      el("btn-device").onclick = async function () {
+        put("manual", "requestDeviceIdentifier", "waiting for approval…", undefined);
+        try {
+          if (!window.nimiqPay || !window.nimiqPay.requestDeviceIdentifier) {
+            throw new Error("nimiqPay.requestDeviceIdentifier is not exposed");
+          }
+          var id = await window.nimiqPay.requestDeviceIdentifier({
+            reason: "Checking what this device supports"
+          });
+          put("manual", "requestDeviceIdentifier", id, true);
+        } catch (e) { put("manual", "requestDeviceIdentifier", err(e), false); }
+      };
+
+      el("btn-send").onclick = async function () {
+        // The decisive gas question. A zero value transfer to yourself moves no
+        // money, so the only thing that can stop it is gas. If this succeeds on
+        // an empty wallet, Nimiq Pay is sponsoring. If it fails, it is not.
+        put("manual", "eth_sendTransaction (0 value)", "waiting for approval…", undefined);
+        try {
+          var from = await currentAccount();
+          var hash = await req("eth_sendTransaction", [{ from: from, to: from, value: "0x0" }]);
+          put("manual", "eth_sendTransaction (0 value)", hash, true);
+        } catch (e) { put("manual", "eth_sendTransaction (0 value)", err(e), false); }
+      };
+
+      el("btn-copy").onclick = async function () {
+        var text = JSON.stringify(results, null, 2);
+        try {
+          await navigator.clipboard.writeText(text);
+          el("btn-copy").textContent = "Copied";
+        } catch (e) {
+          var ta = document.createElement("textarea");
+          ta.value = text; document.body.appendChild(ta); ta.select();
+          try { document.execCommand("copy"); el("btn-copy").textContent = "Copied"; }
+          catch (e2) { el("btn-copy").textContent = "Could not copy, screenshot instead"; }
+          ta.remove();
+        }
+        setTimeout(function () { el("btn-copy").textContent = "Copy all results as text"; }, 2500);
+      };
+
+      runAuto().catch(function (e) { put("auto", "probe crashed", err(e), false); });
+    </script>
+  </body>
+</html>
