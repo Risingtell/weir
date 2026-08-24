@@ -2,6 +2,7 @@ import { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-ethers";
 import "@nomicfoundation/hardhat-verify";
 import "@nomicfoundation/hardhat-chai-matchers";
+import "@typechain/hardhat";
 import * as fs from "fs";
 import "dotenv/config";
 

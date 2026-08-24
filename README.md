@@ -96,6 +96,29 @@ https://nimpay.app/miniapps/open/<your-domain>
 
 It uses the injected `window.ethereum` provider for everything on the EVM side, and `@nimiq/mini-app-sdk` for Nimiq native features.
 
+## The relayer
+
+`relayer/` polls every route the factory has created and calls `distribute` on
+any that are holding funds. That is what makes the split feel automatic.
+
+```bash
+cp .env.example .env      # fill in RPC_URL, FACTORY, TOKEN and a key
+npm run relayer
+```
+
+It is a convenience and never a dependency. Points worth knowing:
+
+- **Its key pays gas and nothing else.** `distribute` can only move funds to the
+  recipients the route owner already configured, so a stolen relayer key cannot
+  redirect a single cent.
+- **Every call is simulated first**, so a route that would revert costs nothing.
+- **A route that keeps failing is dropped** after five attempts, so one broken
+  route cannot burn the whole gas budget. Its recipients can still release it
+  themselves from inside the app.
+- **Amounts below a threshold are left alone**, because gas would cost more than
+  the payout is worth.
+- `DRY_RUN=1` logs what it would do without sending anything.
+
 ## Tests
 
 ```
@@ -106,9 +129,13 @@ npm test
 
 ## Status
 
-Contracts and the mini app both work end to end, verified against a live chain rather than only in tests: a plain transfer in, a correct split out, nothing stranded, and a teammate who owns nothing able to release their own share.
+Contracts, the mini app and the relayer all work end to end, verified against a
+running chain rather than only in tests: a plain transfer in, a correct split
+out, nothing stranded, a teammate who owns nothing able to release their own
+share, and the relayer picking up an untriggered payment on its own and paying
+everybody their exact percentage.
 
-Not yet done: mainnet deployment and the relayer.
+Not yet done: mainnet deployment.
 
 ## Licence
 
