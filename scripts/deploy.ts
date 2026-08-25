@@ -6,6 +6,13 @@ import { writeFileSync, readFileSync } from "node:fs";
  * with. Writes the resulting addresses straight into the app config so the
  * frontend and the chain can never disagree about where the contracts are.
  */
+/**
+ * 0.01 USDT at six decimals. Comfortably above Polygon gas, small enough to
+ * vanish against a real invoice, and refunded to the owner when they settle
+ * their own route.
+ */
+const SETTLEMENT_BOUNTY = 10_000n;
+
 async function main() {
   const [deployer] = await ethers.getSigners();
   const net = network.name;
@@ -26,11 +33,12 @@ async function main() {
   const forwarderAddress = await forwarder.getAddress();
   console.log(`\nWeirForwarder:       ${forwarderAddress}`);
 
-  const factory = await (await ethers.getContractFactory("WeirFactory")).deploy(forwarderAddress);
+  const factory = await (await ethers.getContractFactory("WeirFactory")).deploy(forwarderAddress, SETTLEMENT_BOUNTY);
   await factory.waitForDeployment();
   const factoryAddress = await factory.getAddress();
 
   console.log(`WeirFactory:         ${factoryAddress}`);
+  console.log(`  settlementBounty:    ${SETTLEMENT_BOUNTY} (0.01 USDT)`);
   console.log(`  routeImplementation: ${await factory.routeImplementation()}`);
   console.log(`  vaultImplementation: ${await factory.vaultImplementation()}`);
 

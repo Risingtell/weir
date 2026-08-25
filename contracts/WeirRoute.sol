@@ -27,6 +27,19 @@ contract WeirRoute is Initializable, ReentrancyGuard, ERC2771Context {
     uint256 public constant TOTAL_BPS = 10_000;
     uint256 public constant MAX_RECIPIENTS = 20;
 
+    /// @notice Paid to whoever calls `distribute`, out of the payment itself.
+    ///
+    /// @dev An ERC-20 transfer cannot notify this contract, so somebody has to
+    ///      spend gas to trigger the split. Having one wallet subsidise that for
+    ///      every user is not a business, it is a leak. So the payment funds its
+    ///      own settlement: anyone who triggers it is paid slightly more than the
+    ///      gas costs, which means it gets triggered without anyone being asked
+    ///      to donate.
+    ///
+    ///      It costs the owner nothing to avoid: settle it yourself and the
+    ///      bounty comes straight back to you.
+    uint256 public immutable settlementBounty;
+
     struct Share {
         address account;
         uint96 bps;
@@ -45,6 +58,7 @@ contract WeirRoute is Initializable, ReentrancyGuard, ERC2771Context {
 
     event RulesSet(Share[] shares);
     event Distributed(address indexed token, uint256 total);
+    event SettlementPaid(address indexed token, address indexed to, uint256 amount);
     event Paid(address indexed token, address indexed to, uint256 amount);
     event PaymentDeferred(address indexed token, address indexed to, uint256 amount);
     event Claimed(address indexed token, address indexed to, uint256 amount);
@@ -59,6 +73,7 @@ contract WeirRoute is Initializable, ReentrancyGuard, ERC2771Context {
     error SharesMustSumToTotal(uint256 got);
     error NothingToDistribute();
     error NothingToClaim();
+    error BelowSettlementBounty(uint256 balance, uint256 bounty);
 
     modifier onlyOwner() {
         if (_msgSender() != owner) revert NotOwner();
@@ -69,7 +84,8 @@ contract WeirRoute is Initializable, ReentrancyGuard, ERC2771Context {
     ///        stablecoins and no gas token, so every owner action has to work
     ///        for someone with an empty POL balance. Immutable, which is what
     ///        makes it survive being read through a minimal proxy.
-    constructor(address forwarder) ERC2771Context(forwarder) {
+    constructor(address forwarder, uint256 bounty) ERC2771Context(forwarder) {
+        settlementBounty = bounty;
         // The implementation itself must never be initializable through a clone.
         _disableInitializers();
     }
@@ -139,6 +155,16 @@ contract WeirRoute is Initializable, ReentrancyGuard, ERC2771Context {
     function distribute(address token) external nonReentrant {
         uint256 balance = IERC20(token).balanceOf(address(this));
         if (balance == 0) revert NothingToDistribute();
+
+        // Deliberately msg.sender and not _msgSender(): the bounty reimburses
+        // whoever actually paid the gas, which for a relayed call is the relayer
+        // rather than the person who signed it.
+        if (settlementBounty != 0) {
+            if (balance <= settlementBounty) revert BelowSettlementBounty(balance, settlementBounty);
+            balance -= settlementBounty;
+            _payOrDefer(token, msg.sender, settlementBounty);
+            emit SettlementPaid(token, msg.sender, settlementBounty);
+        }
 
         uint256 n = _shares.length;
         uint256 distributed;

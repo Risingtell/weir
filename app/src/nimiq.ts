@@ -15,10 +15,14 @@ export type { NimSplitRow } from "./nimsplit";
 /**
  * The Nimiq-native half of Weir.
  *
- * Nimiq has no smart contracts, so a NIM split cannot be enforced the way the
- * USDT one is. There is no contract to hold the money and pay it out. What the
- * app can do is compute the same split and send one transfer per recipient,
- * each through its own Nimiq Pay confirmation.
+ * Nimiq is not contract-less: it has four native account types, including
+ * vesting, HTLC and staking. What it lacks is general-purpose contracts, and a
+ * Mini App cannot create even a native one, because the SDK exposes basic
+ * transactions and staking with no way to set a recipient type.
+ *
+ * So a NIM split cannot be enforced the way the USDT one is. There is nothing
+ * to hold the money and pay it out. What the app can do is compute the same
+ * split and send one transfer per recipient, each through its own confirmation.
  *
  * That difference is real and the UI says so plainly rather than implying the
  * two work alike.

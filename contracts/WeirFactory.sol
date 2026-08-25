@@ -41,8 +41,10 @@ contract WeirFactory is ERC2771Context {
     ///        implementations so every user action can be relayed. Weir's users
     ///        hold stablecoins and no gas token, and asking them to go and
     ///        acquire POL before their first action would lose most of them.
-    constructor(address forwarder) ERC2771Context(forwarder) {
-        routeImplementation = address(new WeirRoute(forwarder));
+    /// @param settlementBounty paid out of each payment to whoever triggers the
+    ///        split, so settlement funds itself instead of being subsidised.
+    constructor(address forwarder, uint256 settlementBounty) ERC2771Context(forwarder) {
+        routeImplementation = address(new WeirRoute(forwarder, settlementBounty));
         vaultImplementation = address(new WeirVault(forwarder));
     }
 

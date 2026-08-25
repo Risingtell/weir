@@ -11,7 +11,7 @@ async function deployFixture() {
   await forwarder.waitForDeployment();
   const factory = await (
     await ethers.getContractFactory("WeirFactory")
-  ).deploy(await forwarder.getAddress());
+  ).deploy(await forwarder.getAddress(), 0n);
   const usdt = await (await ethers.getContractFactory("MockUSDT")).deploy();
   return { factory, usdt, forwarder, owner, alice, bob, carol, stranger, relayer };
 }
@@ -582,6 +582,87 @@ describe("Weir", () => {
       expect(await factory.isVault(stranger.address)).to.equal(false);
       expect(await factory.isRoute(await vault.getAddress())).to.equal(false);
       expect(await factory.isVault(await route.getAddress())).to.equal(false);
+    });
+  });
+
+  describe("settlement pays for itself", () => {
+    // 0.01 USDT, comfortably more than Polygon gas and small enough to
+    // disappear against a real invoice.
+    const BOUNTY = 10_000n;
+
+    async function withBounty() {
+      const [owner, alice, bob, , , keeper] = await ethers.getSigners();
+      const forwarder = await (await ethers.getContractFactory("WeirForwarder")).deploy();
+      const factory = await (
+        await ethers.getContractFactory("WeirFactory")
+      ).deploy(await forwarder.getAddress(), BOUNTY);
+      const usdt = await (await ethers.getContractFactory("MockUSDT")).deploy();
+      return { factory, usdt, owner, alice, bob, keeper };
+    }
+
+    it("pays whoever triggers the split, out of the payment", async () => {
+      const { factory, usdt, owner, alice, bob, keeper } = await loadFixture(withBounty);
+      const route = await makeRoute(factory, owner, [
+        { account: alice.address, bps: 5000 },
+        { account: bob.address, bps: 5000 },
+      ]);
+
+      await usdt.mint(await route.getAddress(), USDT("100"));
+      await route.connect(keeper).distribute(await usdt.getAddress());
+
+      // The keeper is paid for the gas they spent, and the rest splits normally.
+      expect(await usdt.balanceOf(keeper.address)).to.equal(BOUNTY);
+      const remaining = USDT("100") - BOUNTY;
+      expect(await usdt.balanceOf(alice.address)).to.equal(remaining / 2n);
+      expect(await usdt.balanceOf(bob.address)).to.equal(remaining - remaining / 2n);
+      expect(await usdt.balanceOf(await route.getAddress())).to.equal(0n);
+    });
+
+    it("costs the owner nothing when they settle it themselves", async () => {
+      const { factory, usdt, owner, alice } = await loadFixture(withBounty);
+      const route = await makeRoute(factory, owner, [
+        { account: owner.address, bps: 5000 },
+        { account: alice.address, bps: 5000 },
+      ]);
+
+      await usdt.mint(await route.getAddress(), USDT("100"));
+      const before = await usdt.balanceOf(owner.address);
+      await route.connect(owner).distribute(await usdt.getAddress());
+
+      // The bounty comes straight back to them, so their share is untouched.
+      const remaining = USDT("100") - BOUNTY;
+      expect(await usdt.balanceOf(owner.address)).to.equal(before + BOUNTY + remaining / 2n);
+    });
+
+    it("refuses a payment too small to be worth settling", async () => {
+      const { factory, usdt, owner, alice } = await loadFixture(withBounty);
+      const route = await makeRoute(factory, owner, [{ account: alice.address, bps: 10000 }]);
+
+      // Splitting this would cost more in gas than it moves.
+      await usdt.mint(await route.getAddress(), BOUNTY);
+      await expect(route.distribute(await usdt.getAddress())).to.be.revertedWithCustomError(
+        route,
+        "BelowSettlementBounty",
+      );
+    });
+
+    it("still accounts for every unit once the bounty is taken", async () => {
+      const { factory, usdt, owner, alice, bob, keeper } = await loadFixture(withBounty);
+      const route = await makeRoute(factory, owner, [
+        { account: alice.address, bps: 3333 },
+        { account: bob.address, bps: 6667 },
+      ]);
+
+      const amount = 777_777n;
+      await usdt.mint(await route.getAddress(), amount);
+      await route.connect(keeper).distribute(await usdt.getAddress());
+
+      const total =
+        (await usdt.balanceOf(alice.address)) +
+        (await usdt.balanceOf(bob.address)) +
+        (await usdt.balanceOf(keeper.address));
+      expect(total).to.equal(amount);
+      expect(await usdt.balanceOf(await route.getAddress())).to.equal(0n);
     });
   });
 

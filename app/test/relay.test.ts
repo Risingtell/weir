@@ -178,7 +178,7 @@ describe("relay endpoint", () => {
     if (!available) return;
 
     forwarder = await deploy("WeirForwarder", []);
-    factory = await deploy("WeirFactory", [forwarder]);
+    factory = await deploy("WeirFactory", [forwarder, 0n]);
     usdt = await deploy("MockUSDT", [], "contracts/mocks");
 
     process.env.WEIR_FORWARDER = forwarder;

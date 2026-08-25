@@ -138,16 +138,20 @@ const de: Dict = {
   "Savings share": "Sparanteil",
   "Nimiq Pay does not expose a balance to mini apps, so enter the amount yourself.":
     "Nimiq Pay zeigt Mini-Apps kein Guthaben an, gib den Betrag also selbst ein.",
-  "Send this share to any Nimiq address you like. It will not be locked, because Nimiq has no contract to lock it with.":
-    "Sende diesen Anteil an eine beliebige Nimiq-Adresse. Er wird nicht gesperrt, weil Nimiq keinen Vertrag dafür hat.",
+  "Send this share to any Nimiq address you like. It will not be locked: Nimiq has vesting contracts, but a Mini App has no way to create one.":
+    "Sende diesen Anteil an eine beliebige Nimiq-Adresse. Er wird nicht gesperrt: Nimiq hat Vesting-Verträge, aber eine Mini-App kann keinen anlegen.",
+
+  "Or pay me in NIM": "Oder zahl mich in NIM",
+  "On Nimiq, paid straight to your wallet": "Auf Nimiq, direkt in deine Wallet",
+  "Copy Nimiq address": "Nimiq-Adresse kopieren",
 
   // Tabs
   "Get paid": "Bezahlt werden",
 
   // Parameterised
   "On {chain}, for {token}": "Auf {chain}, für {token}",
-  "Nimiq has no smart contracts, so this split is not enforced the way your {token} split is. Weir does the arithmetic and you approve one transfer per person. Nothing is held on your behalf.":
-    "Nimiq hat keine Smart Contracts, diese Aufteilung ist also nicht so verbindlich wie deine {token}-Aufteilung. Weir rechnet, und du bestätigst eine Überweisung pro Person. Nichts wird für dich verwahrt.",
+  "A Mini App cannot create a splitting contract on Nimiq, so this split is not enforced the way your {token} split is. Weir does the arithmetic and you approve one transfer per person. Nothing is held on your behalf.":
+    "Eine Mini-App kann auf Nimiq keinen Aufteilungs-Vertrag anlegen, diese Aufteilung ist also nicht so verbindlich wie deine {token}-Aufteilung. Weir rechnet, und du bestätigst eine Überweisung pro Person. Nichts wird für dich verwahrt.",
   "Open Weir inside Nimiq Pay to split NIM as well as {token}.":
     "Öffne Weir in Nimiq Pay, um neben {token} auch NIM aufzuteilen.",
   "A Nimiq address is not the same as an {token} address, so each person needs theirs entered once. Stored on this device only.":
@@ -289,16 +293,20 @@ const es: Dict = {
   "Savings share": "Parte de ahorro",
   "Nimiq Pay does not expose a balance to mini apps, so enter the amount yourself.":
     "Nimiq Pay no muestra el saldo a las mini apps, así que introduce tú la cantidad.",
-  "Send this share to any Nimiq address you like. It will not be locked, because Nimiq has no contract to lock it with.":
-    "Envía esta parte a la dirección Nimiq que quieras. No quedará bloqueada, porque Nimiq no tiene contratos para bloquearla.",
+  "Send this share to any Nimiq address you like. It will not be locked: Nimiq has vesting contracts, but a Mini App has no way to create one.":
+    "Envía esta parte a la dirección Nimiq que quieras. No quedará bloqueada: Nimiq tiene contratos de vesting, pero una Mini App no puede crear uno.",
+
+  "Or pay me in NIM": "O págame en NIM",
+  "On Nimiq, paid straight to your wallet": "En Nimiq, directo a tu monedero",
+  "Copy Nimiq address": "Copiar dirección Nimiq",
 
   // Tabs
   "Get paid": "Cobrar",
 
   // Parameterised
   "On {chain}, for {token}": "En {chain}, para {token}",
-  "Nimiq has no smart contracts, so this split is not enforced the way your {token} split is. Weir does the arithmetic and you approve one transfer per person. Nothing is held on your behalf.":
-    "Nimiq no tiene contratos inteligentes, así que este reparto no se impone como el de {token}. Weir hace el cálculo y tú apruebas una transferencia por persona. No se custodia nada en tu nombre.",
+  "A Mini App cannot create a splitting contract on Nimiq, so this split is not enforced the way your {token} split is. Weir does the arithmetic and you approve one transfer per person. Nothing is held on your behalf.":
+    "Una Mini App no puede crear un contrato de reparto en Nimiq, así que este reparto no se impone como el de {token}. Weir hace el cálculo y tú apruebas una transferencia por persona. No se custodia nada en tu nombre.",
   "Open Weir inside Nimiq Pay to split NIM as well as {token}.":
     "Abre Weir dentro de Nimiq Pay para repartir NIM además de {token}.",
   "A Nimiq address is not the same as an {token} address, so each person needs theirs entered once. Stored on this device only.":

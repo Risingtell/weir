@@ -565,10 +565,29 @@ export class Weir {
       throw new RelayUnreachableError();
     }
 
+    if (!response.ok) throw await this.relayFailure(response);
+
     const payload = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(payload?.error ?? `Relayer refused with ${response.status}.`);
     if (!payload?.hash) throw new Error("Relayer returned no transaction.");
     return payload.hash as `0x${string}`;
+  }
+
+  /**
+   * Decides whether a failed relay response means "there is no relayer here"
+   * or "the relayer looked at this and refused it".
+   *
+   * The difference decides whether the app quietly falls back to a direct send
+   * or shows the user an error. A 404 from a dev server with no function, or a
+   * gateway error from a cold or broken deployment, must not surface as a
+   * failure when the user could simply pay their own gas. A 400 or 403 is a
+   * deliberate refusal and the user needs to see the reason.
+   */
+  private async relayFailure(response: Response): Promise<Error> {
+    if (response.status === 404 || response.status >= 500) {
+      return new RelayUnreachableError();
+    }
+    const payload = await response.json().catch(() => ({}) as any);
+    return new Error(payload?.error ?? `Relayer refused with ${response.status}.`);
   }
 
   /** Asks the relayer to trigger a distribute, for a recipient holding no gas. */
@@ -581,8 +600,8 @@ export class Weir {
       throw new RelayUnreachableError();
     });
 
+    if (!response.ok) throw await this.relayFailure(response);
     const payload = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(payload?.error ?? `Relayer refused with ${response.status}.`);
     return payload.hash as `0x${string}`;
   }
 

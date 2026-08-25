@@ -406,6 +406,17 @@ function linkTab() {
     </div>
 
     ${
+      state.nimiq
+        ? `<h2>${t("Or pay me in NIM")}</h2>
+           <div class="card">
+             <div class="label">${t("On Nimiq, paid straight to your wallet")}</div>
+             <div class="addr" style="margin:8px 0 14px">${esc(state.nimiq.address)}</div>
+             <button class="btn secondary" data-act="copy-nim">${t("Copy Nimiq address")}</button>
+           </div>`
+        : ""
+    }
+
+    ${
       waiting
         ? `<div class="card">
              <div class="label">${t("Waiting to be split")}</div>
@@ -574,7 +585,7 @@ function nimSection() {
   const caveat = `
     <div class="card flat">
       <p style="margin:0" class="label">
-        ${esc(t("Nimiq has no smart contracts, so this split is not enforced the way your {token} split is. Weir does the arithmetic and you approve one transfer per person. Nothing is held on your behalf.", { token: state.weir!.token.symbol }))}
+        ${esc(t("A Mini App cannot create a splitting contract on Nimiq, so this split is not enforced the way your {token} split is. Weir does the arithmetic and you approve one transfer per person. Nothing is held on your behalf.", { token: state.weir!.token.symbol }))}
       </p>
     </div>`;
 
@@ -593,7 +604,7 @@ function nimSection() {
         // choose where it goes.
         const hint = isVault
           ? `<span class="label" style="display:block;margin-top:4px">
-               ${t("Send this share to any Nimiq address you like. It will not be locked, because Nimiq has no contract to lock it with.")}
+               ${t("Send this share to any Nimiq address you like. It will not be locked: Nimiq has vesting contracts, but a Mini App has no way to create one.")}
              </span>`
           : "";
         return `
@@ -1011,6 +1022,10 @@ root.addEventListener("click", async (ev) => {
 
     case "copy-addr":
       if (state.route) await copy(state.route.address, "Address");
+      break;
+
+    case "copy-nim":
+      if (state.nimiq) await copy(state.nimiq.address, "Address");
       break;
 
     case "share-addr":
