@@ -48,7 +48,7 @@ export function installDevWallet(): boolean {
     removeListener() {},
   };
 
-  installMockNimiq(params.get("nim") === "1");
+  installMockNimiq(params.get("nim") === "1", params.get("lang") ?? "en");
 
   console.info(`[weir] dev wallet installed, acting as account #${index}`);
   return true;
@@ -62,7 +62,7 @@ export function installDevWallet(): boolean {
  * method and the app has to look right when the balance is unknown. Transfers
  * are logged and never sent anywhere.
  */
-function installMockNimiq(enabled: boolean) {
+function installMockNimiq(enabled: boolean, language: string) {
   if (!enabled) return;
 
   const address = "NQ07 0000 0000 0000 0000 0000 0000 0000 0001";
@@ -86,7 +86,7 @@ function installMockNimiq(enabled: boolean) {
   };
 
   (window as any).nimiqPay = {
-    language: "en",
+    language,
     requestDeviceIdentifier: async () => "0".repeat(64),
   };
 

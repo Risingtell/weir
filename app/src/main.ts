@@ -5,6 +5,7 @@ import "./styles.css";
 import { Weir, hasWallet, NotInNimiqPayError, UnsupportedChainError } from "./chain";
 import type { RouteView, VaultView, Share, ActivityItem } from "./chain";
 import { BPS_TOTAL } from "./config";
+import { t, initLanguage } from "./i18n";
 import {
   connectNimiq,
   sendNimSplit,
@@ -256,20 +257,19 @@ function tabbar() {
     </button>`;
 
   return `<nav class="tabbar">
-    ${item("link", "Get paid", '<path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.5 1.5"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.5-1.5"/>')}
-    ${item("activity", "Activity", '<path d="M3 12h4l3 8 4-16 3 8h4"/>')}
-    ${item("splits", "Splits", '<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/>')}
-    ${item("savings", "Savings", '<rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>')}
+    ${item("link", t("Get paid"), '<path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.5 1.5"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.5-1.5"/>')}
+    ${item("activity", t("Activity"), '<path d="M3 12h4l3 8 4-16 3 8h4"/>')}
+    ${item("splits", t("Splits"), '<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/>')}
+    ${item("savings", t("Savings"), '<rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>')}
   </nav>`;
 }
 
 function welcomeScreen() {
   const noWallet = !hasWallet();
   return chrome(`
-    <h1>Rules for the money you get paid.</h1>
+    <h1>${t("Rules for the money you get paid.")}</h1>
     <p class="lede">
-      Give a client one address. The moment they pay, it splits between your team
-      and puts a slice into savings you cannot raid on a bad day.
+      ${t("Give a client one address. The moment they pay, it splits between your team and puts a slice into savings you cannot raid on a bad day.")}
     </p>
 
     ${state.error ? `<div class="notice error">${esc(state.error)}</div>` : ""}
@@ -277,25 +277,25 @@ function welcomeScreen() {
     ${
       noWallet
         ? `<div class="notice info">
-             Weir runs inside Nimiq Pay. Open this page there to connect your wallet.
+             ${t("Weir runs inside Nimiq Pay. Open this page there to connect your wallet.")}
            </div>
-           <button class="btn" data-act="open-deeplink">Open in Nimiq Pay</button>`
+           <button class="btn" data-act="open-deeplink">${t("Open in Nimiq Pay")}</button>`
         : `<button class="btn" data-act="connect">${
-            state.busy === "connect" ? '<span class="spinner"></span> Connecting' : "Connect wallet"
+            state.busy === "connect" ? `<span class="spinner"></span> ${t("Connecting")}` : t("Connect wallet")
           }</button>`
     }
 
-    <h2>How it works</h2>
+    <h2>${t("How it works")}</h2>
     <div class="card flat">
       <div class="recipient"><span class="dot" style="background:#e9b213"></span>
-        <div class="who"><div class="name">You get an address</div>
-        <div class="label">Share it like any wallet address</div></div></div>
+        <div class="who"><div class="name">${t("You get an address")}</div>
+        <div class="label">${t("Share it like any wallet address")}</div></div></div>
       <div class="recipient"><span class="dot" style="background:#21bca5"></span>
-        <div class="who"><div class="name">A client pays it</div>
-        <div class="label">From any wallet or exchange, no app needed</div></div></div>
+        <div class="who"><div class="name">${t("A client pays it")}</div>
+        <div class="label">${t("From any wallet or exchange, no app needed")}</div></div></div>
       <div class="recipient"><span class="dot" style="background:#0582ca"></span>
-        <div class="who"><div class="name">It splits on arrival</div>
-        <div class="label">Everyone paid, your slice already saved</div></div></div>
+        <div class="who"><div class="name">${t("It splits on arrival")}</div>
+        <div class="label">${t("Everyone paid, your slice already saved")}</div></div></div>
     </div>
   `);
 }
@@ -307,17 +307,17 @@ function setupScreen() {
   const selfPane = `
     <div class="card">
       <label class="field">
-        <span class="label">Save this much of every payment</span>
+        <span class="label">${t("Save this much of every payment")}</span>
         <input type="number" id="savePct" min="1" max="99" value="${d.savePct}" inputmode="numeric" />
       </label>
       <label class="field">
-        <span class="label">Lock it for</span>
+        <span class="label">${t("Lock it for")}</span>
         <input type="number" id="months" min="1" max="60" value="${d.months}" inputmode="numeric" />
-        <span class="label" style="margin-top:6px;display:block">months. You can extend later, never shorten.</span>
+        <span class="label" style="margin-top:6px;display:block">${t("months. You can extend later, never shorten.")}</span>
       </label>
       <label class="field">
-        <span class="label">What is it for (optional)</span>
-        <input type="text" id="goal" maxlength="60" placeholder="Rainy day" value="${esc(d.goal)}" />
+        <span class="label">${t("What is it for (optional)")}</span>
+        <input type="text" id="goal" maxlength="60" placeholder="${t("Rainy day")}" value="${esc(d.goal)}" />
       </label>
       <div class="splitbar">
         <span style="width:${100 - d.savePct}%;background:#e9b213"></span>
@@ -329,7 +329,7 @@ function setupScreen() {
       </div>
     </div>
     <button class="btn" data-act="create-self" ${state.busy ? "disabled" : ""}>
-      ${state.busy === "create" ? '<span class="spinner"></span> Creating' : "Create my pay address"}
+      ${state.busy === "create" ? `<span class="spinner"></span> ${t("Creating")}` : t("Create my pay address")}
     </button>`;
 
   const teamRows = d.team
@@ -347,30 +347,30 @@ function setupScreen() {
 
   const teamPane = `
     <div class="card">
-      ${teamRows || '<p class="label">Add everyone who should get a cut, including yourself.</p>'}
-      <button class="btn secondary" data-act="add-team">Add someone</button>
+      ${teamRows || '<p class="label">${t("Add everyone who should get a cut, including yourself.")}</p>'}
+      <button class="btn secondary" data-act="add-team">${t("Add someone")}</button>
       <div class="row spread" style="margin-top:14px">
-        <span class="label">Total</span>
+        <span class="label">${t("Total")}</span>
         <span class="pill ${teamTotal === BPS_TOTAL ? "good" : "warn"}">${teamTotal / 100}%</span>
       </div>
     </div>
     <button class="btn" data-act="create-team" ${teamTotal !== BPS_TOTAL || state.busy ? "disabled" : ""}>
-      ${state.busy === "create" ? '<span class="spinner"></span> Creating' : "Create our pay address"}
+      ${state.busy === "create" ? `<span class="spinner"></span> ${t("Creating")}` : t("Create our pay address")}
     </button>`;
 
   return chrome(`
-    <h1>How should money arrive?</h1>
-    <p class="lede">You can change this any time.</p>
+    <h1>${t("How should money arrive?")}</h1>
+    <p class="lede">${t("You can change this any time.")}</p>
 
     ${state.error ? `<div class="notice error">${esc(state.error)}</div>` : ""}
 
     <button class="preset" data-preset="self" aria-pressed="${d.preset === "self"}">
-      <div class="title">Pay myself first</div>
-      <div class="sub">Every payment lands with a slice already put away</div>
+      <div class="title">${t("Pay myself first")}</div>
+      <div class="sub">${t("Every payment lands with a slice already put away")}</div>
     </button>
     <button class="preset" data-preset="team" aria-pressed="${d.preset === "team"}">
-      <div class="title">Split with my team</div>
-      <div class="sub">One client payment, everyone paid at once</div>
+      <div class="title">${t("Split with my team")}</div>
+      <div class="sub">${t("One client payment, everyone paid at once")}</div>
     </button>
 
     ${d.preset === "self" ? selfPane : teamPane}
@@ -383,46 +383,44 @@ function linkTab() {
 
   if (!r) {
     return `
-      <h1>Get paid your way</h1>
+      <h1>${t("Get paid your way")}</h1>
       <p class="lede">
-        You are being paid through someone else's split. Set up your own address
-        and you can be paid directly too, with a slice saved automatically.
+        ${t("You are being paid through someone else's split. Set up your own address and you can be paid directly too, with a slice saved automatically.")}
       </p>
-      <button class="btn" data-act="new-route">Create my pay address</button>`;
+      <button class="btn" data-act="new-route">${t("Create my pay address")}</button>`;
   }
 
   const waiting = r.waiting > 0n;
 
   return `
-    <h1>Your pay address</h1>
-    <p class="lede">Give this to a client like any other wallet address.</p>
+    <h1>${t("Your pay address")}</h1>
+    <p class="lede">${t("Give this to a client like any other wallet address.")}</p>
 
     ${state.qr ? `<div class="qr"><img src="${state.qr}" alt="QR code for your pay address" /></div>` : ""}
 
     <div class="card">
-      <div class="label">On ${esc(w.chain.name)}, for ${esc(w.token.symbol)}</div>
+      <div class="label">${esc(t("On {chain}, for {token}", { chain: w.chain.name, token: w.token.symbol }))}</div>
       <div class="addr" style="margin:8px 0 14px">${esc(r.address)}</div>
-      <button class="btn" data-act="copy-addr">Copy address</button>
-      <button class="btn secondary" data-act="share-addr">Share</button>
+      <button class="btn" data-act="copy-addr">${t("Copy address")}</button>
+      <button class="btn secondary" data-act="share-addr">${t("Share")}</button>
     </div>
 
     ${
       waiting
         ? `<div class="card">
-             <div class="label">Waiting to be split</div>
+             <div class="label">${t("Waiting to be split")}</div>
              <div class="amount">${w.format(r.waiting)}<span class="unit">${esc(w.token.symbol)}</span></div>
              <button class="btn" style="margin-top:14px" data-act="distribute" ${state.busy ? "disabled" : ""}>
-               ${state.busy === "distribute" ? '<span class="spinner"></span> Releasing' : "Release now"}
+               ${state.busy === "distribute" ? `<span class="spinner"></span> ${t("Releasing")}` : t("Release now")}
              </button>
              <p class="label" style="margin:12px 0 0">
-               This normally happens by itself within a minute. The button is here so
-               you never have to wait on us.
+               ${t("This normally happens by itself within a minute. The button is here so you never have to wait on us.")}
              </p>
            </div>`
         : `<div class="card flat">
              <div class="row spread">
-               <span class="label">Nothing waiting</span>
-               <span class="pill good">Ready</span>
+               <span class="label">${t("Nothing waiting")}</span>
+               <span class="pill good">${t("Ready")}</span>
              </div>
            </div>`
     }
@@ -430,21 +428,21 @@ function linkTab() {
     ${
       state.pendingMine > 0n
         ? `<div class="card">
-             <div class="label">Set aside for you after a failed transfer</div>
+             <div class="label">${t("Set aside for you after a failed transfer")}</div>
              <div class="amount">${w.format(state.pendingMine)}<span class="unit">${esc(w.token.symbol)}</span></div>
              <button class="btn" style="margin-top:14px" data-act="claim" ${state.busy ? "disabled" : ""}>
-               ${state.busy === "claim" ? '<span class="spinner"></span> Claiming' : "Claim it"}
+               ${state.busy === "claim" ? `<span class="spinner"></span> ${t("Claiming")}` : t("Claim it")}
              </button>
            </div>`
         : ""
     }
 
-    <h2>Bring your team in</h2>
+    <h2>${t("Bring your team in")}</h2>
     <div class="card">
       <p style="margin-bottom:14px">
-        Anyone you split with can open Weir and watch their share land.
+        ${t("Anyone you split with can open Weir and watch their share land.")}
       </p>
-      <button class="btn secondary" data-act="invite">Invite teammates</button>
+      <button class="btn secondary" data-act="invite">${t("Invite teammates")}</button>
     </div>
   `;
 }
@@ -452,7 +450,7 @@ function linkTab() {
 function relativeTime(ts?: number) {
   if (!ts) return "";
   const secs = Math.max(0, Math.floor(Date.now() / 1000) - ts);
-  if (secs < 60) return "just now";
+  if (secs < 60) return t("just now");
   if (secs < 3600) return `${Math.floor(secs / 60)}m ago`;
   if (secs < 86400) return `${Math.floor(secs / 3600)}h ago`;
   if (secs < 604800) return `${Math.floor(secs / 86400)}d ago`;
@@ -464,16 +462,16 @@ function activityTab() {
 
   if (!state.activityLoaded) {
     return `
-      <h1>Activity</h1>
-      <div class="centered"><div class="spinner"></div><div>Reading the chain</div></div>`;
+      <h1>${t("Activity")}</h1>
+      <div class="centered"><div class="spinner"></div><div>${t("Reading the chain")}</div></div>`;
   }
 
   if (!state.activity.length) {
     return `
-      <h1>Activity</h1>
+      <h1>${t("Activity")}</h1>
       <div class="empty">
         <div class="big">〰</div>
-        <p>Nothing yet. As soon as someone pays your address, every split shows up here.</p>
+        <p>${t("Nothing yet. As soon as someone pays your address, every split shows up here.")}</p>
       </div>`;
   }
 
@@ -491,11 +489,11 @@ function activityTab() {
 
       switch (a.kind) {
         case "split":
-          title = "Payment arrived and was split";
+          title = t("Payment arrived and was split");
           colour = "var(--nq-gold)";
           break;
         case "received":
-          title = isMe ? "Paid to you" : isVault ? "Into your savings" : `Paid to ${short(a.counterparty ?? "")}`;
+          title = isMe ? t("Paid to you") : isVault ? t("Into your savings") : `${t("Paid to you")}: ${short(a.counterparty ?? "")}`;
           colour = isVault ? "var(--nq-green)" : isMe ? "var(--nq-green)" : "var(--nq-blue-raised)";
           break;
         case "deferred":
@@ -507,11 +505,11 @@ function activityTab() {
           colour = "var(--nq-green)";
           break;
         case "withdrawn":
-          title = "Withdrawn from savings";
+          title = t("Withdrawn from savings");
           colour = "var(--nq-orange)";
           break;
         case "relocked":
-          title = a.detail ? `Savings locked until ${humanDate(a.detail)}` : "Savings locked for longer";
+          title = a.detail ? `${t("Lock it for longer")}: ${humanDate(a.detail)}` : t("Savings locked for longer");
           colour = "var(--nq-blue)";
           break;
       }
@@ -532,13 +530,12 @@ function activityTab() {
   // money legitimately appears more than once. Say so rather than let it look
   // like double counting.
   return `
-    <h1>Activity</h1>
-    <p class="lede">Everything that has moved through your addresses.</p>
+    <h1>${t("Activity")}</h1>
+    <p class="lede">${t("Everything that has moved through your addresses.")}</p>
     <div class="card">${rows}</div>
     <div class="card flat">
       <p style="margin:0" class="label">
-        A single payment shows as one arrival plus one line per person paid, so
-        the same money appears more than once on purpose.
+        ${t("A single payment shows as one arrival plus one line per person paid, so the same money appears more than once on purpose.")}
       </p>
     </div>`;
 }
@@ -552,7 +549,7 @@ function nimSection() {
       <h2>NIM</h2>
       <div class="card flat">
         <p style="margin:0" class="label">
-          Open Weir inside Nimiq Pay to split NIM as well as ${esc(state.weir!.token.symbol)}.
+          ${esc(t("Open Weir inside Nimiq Pay to split NIM as well as {token}.", { token: state.weir!.token.symbol }))}
         </p>
       </div>`;
   }
@@ -569,17 +566,15 @@ function nimSection() {
 
   const balanceLine =
     n.balanceLunas !== null
-      ? `<div class="row spread"><span class="label">Your NIM</span><span class="pct">${formatNim(n.balanceLunas)} NIM</span></div>`
-      : `<div class="label">Nimiq Pay does not expose a balance to mini apps, so enter the amount yourself.</div>`;
+      ? `<div class="row spread"><span class="label">${t("Your NIM")}</span><span class="pct">${formatNim(n.balanceLunas)} NIM</span></div>`
+      : `<div class="label">${t("Nimiq Pay does not expose a balance to mini apps, so enter the amount yourself.")}</div>`;
 
   // The honest caveat. USDT is enforced by a contract; this is not, and saying
   // otherwise would be a lie the user only discovers when it matters.
   const caveat = `
     <div class="card flat">
       <p style="margin:0" class="label">
-        Nimiq has no smart contracts, so this split is not enforced the way your
-        ${esc(state.weir!.token.symbol)} split is. Weir does the arithmetic and you approve one
-        transfer per person. Nothing is held on your behalf.
+        ${esc(t("Nimiq has no smart contracts, so this split is not enforced the way your {token} split is. Weir does the arithmetic and you approve one transfer per person. Nothing is held on your behalf.", { token: state.weir!.token.symbol }))}
       </p>
     </div>`;
 
@@ -591,15 +586,14 @@ function nimSection() {
       .map((m) => {
         const isVault = m.evm.toLowerCase() === vaultLower;
         const isMe = m.evm.toLowerCase() === meLower;
-        const who = isVault ? "Savings share" : isMe ? "You" : short(m.evm);
+        const who = isVault ? t("Savings share") : isMe ? t("You") : short(m.evm);
         // The savings vault is an EVM contract and cannot receive NIM, and NIM
         // cannot be time locked at all. Rather than quietly drop its share and
         // change everyone else's percentages, say what it is and let the owner
         // choose where it goes.
         const hint = isVault
           ? `<span class="label" style="display:block;margin-top:4px">
-               Send this share to any Nimiq address you like. It will not be locked,
-               because Nimiq has no contract to lock it with.
+               ${t("Send this share to any Nimiq address you like. It will not be locked, because Nimiq has no contract to lock it with.")}
              </span>`
           : "";
         return `
@@ -618,12 +612,11 @@ function nimSection() {
       ${caveat}
       <div class="card">
         <p class="label" style="margin-bottom:14px">
-          A Nimiq address is not the same as an ${esc(state.weir!.token.symbol)} address, so each
-          person needs theirs entered once. Stored on this device only.
+          ${esc(t("A Nimiq address is not the same as an {token} address, so each person needs theirs entered once. Stored on this device only.", { token: state.weir!.token.symbol }))}
         </p>
         ${rows}
-        <button class="btn" data-act="nim-save">Save addresses</button>
-        ${state.nimEditing ? '<button class="btn ghost" data-act="nim-cancel">Cancel</button>' : ""}
+        <button class="btn" data-act="nim-save">${t("Save addresses")}</button>
+        ${state.nimEditing ? '<button class="btn ghost" data-act="nim-cancel">${t("Cancel")}</button>' : ""}
       </div>`;
   }
 
@@ -670,7 +663,7 @@ function nimSection() {
     <div class="card">
       ${balanceLine}
       <label class="field" style="margin-top:14px">
-        <span class="label">Split this much NIM</span>
+        <span class="label">${t("Split this much NIM")}</span>
         <input type="text" id="nimAmount" inputmode="decimal" placeholder="0"
                value="${esc(state.nimAmount)}" />
       </label>
@@ -680,11 +673,11 @@ function nimSection() {
     <button class="btn" data-act="nim-send" ${state.nimProgress || !state.nimAmount ? "disabled" : ""}>
       ${
         state.nimProgress
-          ? `<span class="spinner"></span> Approve ${state.nimProgress.index} of ${state.nimProgress.total}`
-          : "Send the NIM split"
+          ? `<span class="spinner"></span> ${state.nimProgress.index} / ${state.nimProgress.total}`
+          : t("Send the NIM split")
       }
     </button>
-    <button class="btn ghost" data-act="nim-edit">Change Nimiq addresses</button>`;
+    <button class="btn ghost" data-act="nim-edit">${t("Change Nimiq addresses")}</button>`;
 }
 
 function splitsTab() {
@@ -696,7 +689,7 @@ function splitsTab() {
       .map((s, i) => {
         const isVault = state.vault && s.account.toLowerCase() === state.vault.address.toLowerCase();
         const isMe = s.account.toLowerCase() === w.account.toLowerCase();
-        const named = isVault ? "Savings vault" : isMe ? "You" : null;
+        const named = isVault ? t("Savings vault") : isMe ? t("You") : null;
         return `
         <div class="recipient">
           <span class="dot" style="background:${PALETTE[i % PALETTE.length]}"></span>
@@ -727,7 +720,7 @@ function splitsTab() {
       ${
         o.waiting > 0n
           ? `<button class="btn secondary" style="margin-top:14px" data-act="distribute-other" data-addr="${o.address}">
-               Release it
+               ${t("Release it")}
              </button>`
           : ""
       }
@@ -736,21 +729,21 @@ function splitsTab() {
     .join("");
 
   return `
-    <h1>Splits</h1>
-    <p class="lede">Where money goes the moment it arrives.</p>
+    <h1>${t("Splits")}</h1>
+    <p class="lede">${t("Where money goes the moment it arrives.")}</p>
 
     ${
       r
-        ? `<h2>Your split</h2>
+        ? `<h2>${t("Your split")}</h2>
            <div class="card">
              ${bar(r.shares)}
              ${rows(r.shares)}
            </div>
-           <button class="btn secondary" data-act="edit-rules">Change the split</button>`
+           <button class="btn secondary" data-act="edit-rules">${t("Change the split")}</button>`
         : ""
     }
 
-    ${theirs ? `<h2>Splits that pay you</h2>${theirs}` : ""}
+    ${theirs ? `<h2>${t("Splits that pay you")}</h2>${theirs}` : ""}
 
     ${nimSection()}
   `;
@@ -762,26 +755,26 @@ function savingsTab() {
 
   if (!v) {
     return `
-      <h1>Savings</h1>
+      <h1>${t("Savings")}</h1>
       <div class="empty">
         <div class="big">🔒</div>
-        <p>You have not set a slice aside yet.</p>
+        <p>${t("You have not set a slice aside yet.")}</p>
       </div>
-      <button class="btn" data-act="new-vault">Start saving a slice</button>`;
+      <button class="btn" data-act="new-vault">${t("Start saving a slice")}</button>`;
   }
 
   const days = daysUntil(v.unlockAt);
 
   return `
-    <h1>Savings</h1>
+    <h1>${t("Savings")}</h1>
     ${v.goal ? `<p class="lede">${esc(v.goal)}</p>` : ""}
 
     <div class="card">
-      <div class="label">Put away so far</div>
+      <div class="label">${t("Put away so far")}</div>
       <div class="amount">${w.format(v.balance)}<span class="unit">${esc(w.token.symbol)}</span></div>
       <div class="row spread" style="margin-top:16px">
         <span class="pill ${v.locked ? "warn" : "good"}">
-          ${v.locked ? `Locked for ${days} more day${days === 1 ? "" : "s"}` : "Unlocked"}
+          ${v.locked ? `${t("Lock it for")} ${days}d` : t("Unlocked")}
         </span>
         <span class="label">${humanDate(v.unlockAt)}</span>
       </div>
@@ -791,33 +784,32 @@ function savingsTab() {
       v.locked
         ? `<div class="card flat">
              <p style="margin:0">
-               The lock is the point. You can push the date further out, but there is
-               deliberately no way to bring it closer.
+               ${t("The lock is the point. You can push the date further out, but there is deliberately no way to bring it closer.")}
              </p>
            </div>
            ${
              state.extending
                ? `<div class="card">
                     <label class="field">
-                      <span class="label">Keep it locked until</span>
+                      <span class="label">${t("Keep it locked until")}</span>
                       <input type="date" id="newUnlock"
                              min="${dateInputValue(v.unlockAt + 86_400)}"
                              value="${dateInputValue(v.unlockAt + 90 * 86_400)}" />
                     </label>
                     <button class="btn" data-act="extend-confirm" ${state.busy ? "disabled" : ""}>
-                      ${state.busy === "extend" ? '<span class="spinner"></span> Extending' : "Confirm"}
+                      ${state.busy === "extend" ? `<span class="spinner"></span> ${t("Extending")}` : t("Confirm")}
                     </button>
-                    <button class="btn ghost" data-act="extend-cancel">Cancel</button>
+                    <button class="btn ghost" data-act="extend-cancel">${t("Cancel")}</button>
                   </div>`
-               : `<button class="btn secondary" data-act="extend">Lock it for longer</button>`
+               : `<button class="btn secondary" data-act="extend">${t("Lock it for longer")}</button>`
            }`
         : `<button class="btn" data-act="withdraw" ${state.busy ? "disabled" : ""}>
-             ${state.busy === "withdraw" ? '<span class="spinner"></span> Withdrawing' : "Withdraw everything"}
+             ${state.busy === "withdraw" ? `<span class="spinner"></span> ${t("Withdrawing")}` : t("Withdraw everything")}
            </button>`
     }
 
     <div class="card flat" style="margin-top:16px">
-      <div class="label">Vault address</div>
+      <div class="label">${t("Vault address")}</div>
       <div class="addr" style="margin-top:6px">${esc(v.address)}</div>
     </div>
   `;
@@ -835,16 +827,16 @@ function readyScreen() {
 
 function errorScreen() {
   return chrome(`
-    <h1>Something went wrong</h1>
+    <h1>${t("Something went wrong")}</h1>
     <div class="notice error">${esc(state.error ?? "Unknown error")}</div>
-    <button class="btn" data-act="retry">Try again</button>
+    <button class="btn" data-act="retry">${t("Try again")}</button>
   `);
 }
 
 function render() {
   switch (state.phase) {
     case "boot":
-      root.innerHTML = `<div class="centered"><div class="spinner"></div><div>Starting Weir</div></div>`;
+      root.innerHTML = `<div class="centered"><div class="spinner"></div><div>${t("Starting Weir")}</div></div>`;
       break;
     case "welcome":
       root.innerHTML = welcomeScreen();
@@ -1212,7 +1204,7 @@ root.addEventListener("click", async (ev) => {
       const chosen = input?.value ? Math.floor(new Date(input.value).getTime() / 1000) : 0;
 
       if (!chosen) {
-        state.error = "Pick a date first.";
+        state.error = t("Pick a date first.");
         render();
         break;
       }
@@ -1285,5 +1277,6 @@ if (import.meta.env.DEV) {
   installDevWallet();
 }
 
+initLanguage();
 render();
 void boot();
