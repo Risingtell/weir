@@ -48,6 +48,47 @@ export function installDevWallet(): boolean {
     removeListener() {},
   };
 
+  installMockNimiq(params.get("nim") === "1");
+
   console.info(`[weir] dev wallet installed, acting as account #${index}`);
   return true;
+}
+
+/**
+ * A stand-in for the Nimiq provider, so the NIM half of the UI can be driven
+ * without a phone. Off unless `&nim=1` is passed.
+ *
+ * It deliberately makes `request` fail, because the real SDK exposes no balance
+ * method and the app has to look right when the balance is unknown. Transfers
+ * are logged and never sent anywhere.
+ */
+function installMockNimiq(enabled: boolean) {
+  if (!enabled) return;
+
+  const address = "NQ07 0000 0000 0000 0000 0000 0000 0000 0001";
+  let block = 3_100_000;
+
+  (window as any).nimiq = {
+    listAccounts: async () => [address],
+    isConsensusEstablished: async () => true,
+    getBlockNumber: async () => block++,
+    sign: async () => ({ signature: "0x" + "11".repeat(32) }),
+    sendBasicTransaction: async (tx: { recipient: string; value: number }) => {
+      console.info(`[weir] mock NIM transfer ${tx.value} Lunas -> ${tx.recipient}`);
+      // One recipient always refuses, so the partial-failure path is exercised
+      // rather than only ever seeing the happy case.
+      if (tx.recipient.includes("9999")) throw new Error("user rejected");
+      return "mock-tx-" + Math.random().toString(16).slice(2, 10);
+    },
+    request: async () => {
+      throw new Error("no balance method, as in the real SDK");
+    },
+  };
+
+  (window as any).nimiqPay = {
+    language: "en",
+    requestDeviceIdentifier: async () => "0".repeat(64),
+  };
+
+  console.info("[weir] mock Nimiq provider installed");
 }

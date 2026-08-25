@@ -5,6 +5,17 @@ import "./styles.css";
 import { Weir, hasWallet, NotInNimiqPayError, UnsupportedChainError } from "./chain";
 import type { RouteView, VaultView, Share, ActivityItem } from "./chain";
 import { BPS_TOTAL } from "./config";
+import {
+  connectNimiq,
+  sendNimSplit,
+  formatNim,
+  parseNim,
+  isNimiqAddress,
+  normaliseNimiqAddress,
+  planNimSplit,
+  type NimiqSession,
+  type NimSplitRow,
+} from "./nimiq";
 
 /** Where this mini app is hosted. Used to build the Nimiq Pay deeplink. */
 const APP_HOST = window.location.host;
@@ -29,6 +40,14 @@ interface State {
   draft: { preset: "self" | "team"; savePct: number; months: number; goal: string; team: Share[] };
   /** Whether the savings tab is showing the extend-the-lock panel. */
   extending: boolean;
+  /** The Nimiq side. Null until connected, and null forever outside Nimiq Pay. */
+  nimiq: NimiqSession | null;
+  /** Nimiq address for each EVM recipient, entered by the route owner. */
+  nimAddresses: Record<string, string>;
+  nimAmount: string;
+  nimEditing: boolean;
+  nimProgress: { index: number; total: number } | null;
+  nimResult: { sent: NimSplitRow[]; failed: { row: NimSplitRow; reason: string }[] } | null;
 }
 
 const state: State = {
@@ -46,6 +65,12 @@ const state: State = {
   qr: null,
   draft: { preset: "self", savePct: 20, months: 3, goal: "", team: [] },
   extending: false,
+  nimiq: null,
+  nimAddresses: {},
+  nimAmount: "",
+  nimEditing: false,
+  nimProgress: null,
+  nimResult: null,
 };
 
 const root = document.getElementById("app")!;
@@ -111,6 +136,31 @@ function humanDate(ts: number) {
     month: "short",
     year: "numeric",
   });
+}
+
+/**
+ * Nimiq addresses for teammates live on this device only.
+ *
+ * They are not on chain: putting them there would mean a contract change and a
+ * separate registration step for every teammate, to serve the narrower case of
+ * a team that is paid in NIM. The owner types them once instead, and re-types
+ * them on a new device.
+ */
+function loadNimAddresses(routeAddress: string): Record<string, string> {
+  try {
+    const raw = localStorage.getItem(`weir.nim.${routeAddress.toLowerCase()}`);
+    return raw ? (JSON.parse(raw) as Record<string, string>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveNimAddresses(routeAddress: string, map: Record<string, string>) {
+  try {
+    localStorage.setItem(`weir.nim.${routeAddress.toLowerCase()}`, JSON.stringify(map));
+  } catch {
+    /* private mode, or storage disabled. The session still works. */
+  }
 }
 
 function daysUntil(ts: number) {
@@ -493,6 +543,150 @@ function activityTab() {
     </div>`;
 }
 
+function nimSection() {
+  const r = state.route;
+  const n = state.nimiq;
+
+  if (!n) {
+    return `
+      <h2>NIM</h2>
+      <div class="card flat">
+        <p style="margin:0" class="label">
+          Open Weir inside Nimiq Pay to split NIM as well as ${esc(state.weir!.token.symbol)}.
+        </p>
+      </div>`;
+  }
+
+  if (!r) return "";
+
+  const shares = r.shares;
+  const mapped = shares.map((s) => ({
+    evm: s.account,
+    bps: s.bps,
+    nim: state.nimAddresses[s.account.toLowerCase()] ?? "",
+  }));
+  const missing = mapped.filter((m) => !isNimiqAddress(m.nim));
+
+  const balanceLine =
+    n.balanceLunas !== null
+      ? `<div class="row spread"><span class="label">Your NIM</span><span class="pct">${formatNim(n.balanceLunas)} NIM</span></div>`
+      : `<div class="label">Nimiq Pay does not expose a balance to mini apps, so enter the amount yourself.</div>`;
+
+  // The honest caveat. USDT is enforced by a contract; this is not, and saying
+  // otherwise would be a lie the user only discovers when it matters.
+  const caveat = `
+    <div class="card flat">
+      <p style="margin:0" class="label">
+        Nimiq has no smart contracts, so this split is not enforced the way your
+        ${esc(state.weir!.token.symbol)} split is. Weir does the arithmetic and you approve one
+        transfer per person. Nothing is held on your behalf.
+      </p>
+    </div>`;
+
+  if (state.nimEditing || missing.length) {
+    const vaultLower = state.vault?.address.toLowerCase();
+    const meLower = state.weir!.account.toLowerCase();
+
+    const rows = mapped
+      .map((m) => {
+        const isVault = m.evm.toLowerCase() === vaultLower;
+        const isMe = m.evm.toLowerCase() === meLower;
+        const who = isVault ? "Savings share" : isMe ? "You" : short(m.evm);
+        // The savings vault is an EVM contract and cannot receive NIM, and NIM
+        // cannot be time locked at all. Rather than quietly drop its share and
+        // change everyone else's percentages, say what it is and let the owner
+        // choose where it goes.
+        const hint = isVault
+          ? `<span class="label" style="display:block;margin-top:4px">
+               Send this share to any Nimiq address you like. It will not be locked,
+               because Nimiq has no contract to lock it with.
+             </span>`
+          : "";
+        return `
+        <label class="field">
+          <span class="label">${esc(who)} &middot; ${m.bps / 100}%</span>
+          <input class="mono" type="text" data-nim-for="${esc(m.evm)}"
+                 placeholder="NQ.." value="${esc(m.nim)}"
+                 autocapitalize="characters" autocorrect="off" spellcheck="false" />
+          ${hint}
+        </label>`;
+      })
+      .join("");
+
+    return `
+      <h2>NIM</h2>
+      ${caveat}
+      <div class="card">
+        <p class="label" style="margin-bottom:14px">
+          A Nimiq address is not the same as an ${esc(state.weir!.token.symbol)} address, so each
+          person needs theirs entered once. Stored on this device only.
+        </p>
+        ${rows}
+        <button class="btn" data-act="nim-save">Save addresses</button>
+        ${state.nimEditing ? '<button class="btn ghost" data-act="nim-cancel">Cancel</button>' : ""}
+      </div>`;
+  }
+
+  let preview = "";
+  try {
+    const lunas = state.nimAmount ? parseNim(state.nimAmount) : 0n;
+    if (lunas > 0n) {
+      const plan = planNimSplit(lunas, mapped.map((m) => ({ address: m.nim, bps: m.bps })));
+      preview = `<div class="card">${plan
+        .map(
+          (row, i) => `
+          <div class="recipient">
+            <span class="dot" style="background:${PALETTE[i % PALETTE.length]}"></span>
+            <div class="who">
+              <div class="name">${esc(short(row.address))}</div>
+              <div class="label">${row.bps / 100}%</div>
+            </div>
+            <div class="pct">${formatNim(row.lunas)}</div>
+          </div>`,
+        )
+        .join("")}</div>`;
+    }
+  } catch {
+    preview = `<div class="notice error">That is not a number Weir can split.</div>`;
+  }
+
+  const result = state.nimResult
+    ? `<div class="notice ${state.nimResult.failed.length ? "error" : "info"}">
+         Sent ${state.nimResult.sent.length} of
+         ${state.nimResult.sent.length + state.nimResult.failed.length}.
+         ${
+           state.nimResult.failed.length
+             ? "These did not go through: " +
+               state.nimResult.failed.map((f) => esc(short(f.row.address))).join(", ") +
+               ". Nothing was taken for them, you can send again."
+             : ""
+         }
+       </div>`
+    : "";
+
+  return `
+    <h2>NIM</h2>
+    ${caveat}
+    <div class="card">
+      ${balanceLine}
+      <label class="field" style="margin-top:14px">
+        <span class="label">Split this much NIM</span>
+        <input type="text" id="nimAmount" inputmode="decimal" placeholder="0"
+               value="${esc(state.nimAmount)}" />
+      </label>
+    </div>
+    ${preview}
+    ${result}
+    <button class="btn" data-act="nim-send" ${state.nimProgress || !state.nimAmount ? "disabled" : ""}>
+      ${
+        state.nimProgress
+          ? `<span class="spinner"></span> Approve ${state.nimProgress.index} of ${state.nimProgress.total}`
+          : "Send the NIM split"
+      }
+    </button>
+    <button class="btn ghost" data-act="nim-edit">Change Nimiq addresses</button>`;
+}
+
 function splitsTab() {
   const w = state.weir!;
   const r = state.route;
@@ -557,6 +751,8 @@ function splitsTab() {
     }
 
     ${theirs ? `<h2>Splits that pay you</h2>${theirs}` : ""}
+
+    ${nimSection()}
   `;
 }
 
@@ -697,6 +893,19 @@ async function connect() {
     state.weir = w;
     await refresh();
   });
+
+  // The Nimiq half is optional and must never hold up the USDT half, so it
+  // connects on its own and re-renders when it arrives.
+  void connectNimiq()
+    .then((session) => {
+      if (!session) return;
+      state.nimiq = session;
+      if (state.route) state.nimAddresses = loadNimAddresses(state.route.address);
+      render();
+    })
+    .catch(() => {
+      /* not inside Nimiq Pay, which is a normal way to run */
+    });
 }
 
 function readDraftInputs() {
@@ -903,6 +1112,90 @@ root.addEventListener("click", async (ev) => {
       render();
       break;
 
+    case "nim-edit":
+      state.nimEditing = true;
+      render();
+      break;
+
+    case "nim-cancel":
+      state.nimEditing = false;
+      render();
+      break;
+
+    case "nim-save": {
+      const map: Record<string, string> = { ...state.nimAddresses };
+      let bad: string | null = null;
+
+      document.querySelectorAll<HTMLInputElement>("[data-nim-for]").forEach((input) => {
+        const evm = input.dataset.nimFor!.toLowerCase();
+        const value = input.value.trim();
+        if (!value) {
+          delete map[evm];
+          return;
+        }
+        if (!isNimiqAddress(value)) {
+          bad = value;
+          return;
+        }
+        map[evm] = normaliseNimiqAddress(value);
+      });
+
+      if (bad) {
+        state.error = `${bad} is not a Nimiq address. They start with NQ.`;
+        render();
+        break;
+      }
+
+      state.nimAddresses = map;
+      if (state.route) saveNimAddresses(state.route.address, map);
+      state.nimEditing = false;
+      state.error = null;
+      render();
+      toast("Nimiq addresses saved");
+      break;
+    }
+
+    case "nim-send": {
+      const session = state.nimiq;
+      const route = state.route;
+      if (!session || !route) break;
+
+      let plan: NimSplitRow[];
+      try {
+        const lunas = parseNim(state.nimAmount);
+        if (lunas <= 0n) throw new Error("Enter an amount above zero.");
+        plan = planNimSplit(
+          lunas,
+          route.shares.map((sh) => ({
+            address: state.nimAddresses[sh.account.toLowerCase()] ?? "",
+            bps: sh.bps,
+          })),
+        );
+      } catch (e) {
+        state.error = describeError(e);
+        render();
+        break;
+      }
+
+      state.nimResult = null;
+      state.error = null;
+      try {
+        const outcome = await sendNimSplit(session, plan, (p) => {
+          state.nimProgress = { index: p.index, total: p.total };
+          render();
+        });
+        state.nimResult = outcome;
+        if (outcome.sent.length) toast(`Sent ${outcome.sent.length} NIM transfer${outcome.sent.length === 1 ? "" : "s"}`);
+      } catch (e) {
+        state.error = describeError(e);
+      } finally {
+        state.nimProgress = null;
+        state.nimAmount = "";
+        render();
+      }
+      break;
+    }
+
     case "extend":
       state.extending = true;
       render();
@@ -948,6 +1241,10 @@ root.addEventListener("input", (ev) => {
   if (el.id === "savePct" || el.id === "months" || el.id === "goal") {
     readDraftInputs();
     if (el.id === "savePct") render();
+  }
+  if (el.id === "nimAmount") {
+    state.nimAmount = (el as HTMLInputElement).value;
+    render();
   }
 });
 

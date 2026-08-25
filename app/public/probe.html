@@ -201,6 +201,37 @@
         catch (e) { put("auto", "nimiq.isConsensusEstablished", err(e), false); }
         try { put("auto", "nimiq.getBlockNumber", await nimiq.getBlockNumber(), true); }
         catch (e) { put("auto", "nimiq.getBlockNumber", err(e), false); }
+
+        // The SDK exposes no balance method, so find out whether one is
+        // reachable another way. Weir needs this to show a NIM balance before
+        // splitting it, and guessing would be building on sand.
+        var addr = null;
+        try {
+          var accs = await nimiq.listAccounts();
+          if (Array.isArray(accs) && accs.length) {
+            addr = typeof accs[0] === "string" ? accs[0] : JSON.stringify(accs[0]);
+          }
+          put("auto", "nimiq first account shape",
+            typeof accs[0] + "  " + JSON.stringify(accs[0]), true);
+        } catch (e) { put("auto", "nimiq first account shape", err(e), false); }
+
+        put("auto", "nimiq.request exists", typeof nimiq.request === "function",
+          typeof nimiq.request === "function");
+
+        if (typeof nimiq.request === "function" && addr && addr.indexOf("NQ") === 0) {
+          var attempts = [
+            ["getAccountByAddress", [addr]],
+            ["getBalance", [addr]],
+            ["account", [addr]]
+          ];
+          for (var j = 0; j < attempts.length; j++) {
+            var label = "nimiq.request " + attempts[j][0];
+            try {
+              var out = await nimiq.request({ method: attempts[j][0], params: attempts[j][1] });
+              put("auto", label, JSON.stringify(out), true);
+            } catch (e) { put("auto", label, err(e), false); }
+          }
+        }
       }
 
       async function runAuto() {

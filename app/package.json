@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview --host"
+    "preview": "vite preview --host",
+    "test": "tsx --test test/*.test.ts"
   },
   "dependencies": {
     "@nimiq/mini-app-sdk": "^0.1.0",
