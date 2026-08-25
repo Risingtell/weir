@@ -33,6 +33,27 @@ export interface NimiqSession {
   blockNumber: number | null;
 }
 
+/**
+ * The Nimiq Pay bridge intermittently answers with
+ * `[birpc] timeout on calling "handleRequest"` even when the call is fine.
+ * Measured on a real device: listAccounts timed out once and then returned a
+ * perfectly good address on the retry.
+ */
+async function withRetry<T>(fn: () => Promise<T>, attempts = 3, delayMs = 700): Promise<T> {
+  let last: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      last = e;
+      const message = String((e as any)?.message ?? e);
+      if (/user rejected|denied|user cancell?ed/i.test(message)) throw e;
+      if (i < attempts - 1) await new Promise((r) => setTimeout(r, delayMs * (i + 1)));
+    }
+  }
+  throw last;
+}
+
 /** Anything the SDK may hand back instead of a value. */
 function unwrap<T>(value: T | { error?: unknown; message?: string }): T {
   if (value && typeof value === "object" && ("error" in value || "message" in value)) {
@@ -73,7 +94,7 @@ export async function connectNimiq(timeout = 4000): Promise<NimiqSession | null>
 
   let address: string;
   try {
-    const accounts = unwrap<string[]>(await provider.listAccounts());
+    const accounts = await withRetry(async () => unwrap<string[]>(await provider.listAccounts()));
     if (!accounts?.length) return null;
     address = accounts[0];
   } catch {
@@ -88,36 +109,22 @@ export async function connectNimiq(timeout = 4000): Promise<NimiqSession | null>
   return {
     provider,
     address,
-    balanceLunas: await readBalance(provider, address),
+    balanceLunas: balanceIsUnavailable(),
     consensus: Boolean(consensus),
     blockNumber: blockNumber as number | null,
   };
 }
 
 /**
- * The SDK exposes no balance method. There is a generic `request` passthrough,
- * so try the usual Nimiq RPC names through it. Every one of these may be
- * unavailable, and a missing balance is not fatal: the amount to split is typed
- * in by the user and the wallet rejects the transfer if it is short.
+ * Nimiq Pay exposes no way to read a NIM balance to a mini app.
+ *
+ * This is not an assumption. All three plausible RPC names were tried against
+ * the real wallet on a real device and every one answered "Load failed":
+ * getAccountByAddress, getBalance and account. Retrying them on every launch
+ * would only add three doomed round trips to startup, so the app asks the user
+ * for the amount instead and lets the wallet reject a transfer it cannot cover.
  */
-async function readBalance(provider: NimiqProvider, address: string): Promise<bigint | null> {
-  const anyProvider = provider as unknown as {
-    request?: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
-  };
-  if (typeof anyProvider.request !== "function") return null;
-
-  for (const method of ["getAccountByAddress", "getBalance", "account"]) {
-    try {
-      const result: any = await anyProvider.request({ method, params: [address] });
-      const raw =
-        typeof result === "number" || typeof result === "string"
-          ? result
-          : result?.balance ?? result?.data?.balance;
-      if (raw !== undefined && raw !== null && raw !== "") return BigInt(raw);
-    } catch {
-      /* try the next name */
-    }
-  }
+function balanceIsUnavailable(): null {
   return null;
 }
 

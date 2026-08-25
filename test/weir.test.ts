@@ -567,6 +567,24 @@ describe("Weir", () => {
     });
   });
 
+  describe("what the factory will vouch for", () => {
+    it("recognises the routes and vaults it created, and nothing else", async () => {
+      const { factory, owner, alice, stranger } = await loadFixture(deployFixture);
+      const route = await makeRoute(factory, owner, [{ account: alice.address, bps: 10000 }]);
+      const vault = await makeVault(factory, owner, (await time.latest()) + 1000, "goal");
+
+      // A relayer pays gas for these, so it has to be able to tell ours apart
+      // from any address a stranger asks it to call.
+      expect(await factory.isRoute(await route.getAddress())).to.equal(true);
+      expect(await factory.isVault(await vault.getAddress())).to.equal(true);
+
+      expect(await factory.isRoute(stranger.address)).to.equal(false);
+      expect(await factory.isVault(stranger.address)).to.equal(false);
+      expect(await factory.isRoute(await vault.getAddress())).to.equal(false);
+      expect(await factory.isVault(await route.getAddress())).to.equal(false);
+    });
+  });
+
   describe("clone safety", () => {
     it("cannot initialize the implementation itself", async () => {
       const { factory, alice } = await loadFixture(deployFixture);

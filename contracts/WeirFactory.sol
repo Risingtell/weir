@@ -25,6 +25,10 @@ contract WeirFactory is ERC2771Context {
 
     /// @notice Routes this factory created, so only they can update the index.
     mapping(address route => bool) public isRoute;
+
+    /// @notice Vaults this factory created. A relayer paying gas on a user's
+    ///         behalf uses this to refuse anything that is not one of ours.
+    mapping(address vault => bool) public isVault;
     mapping(address recipient => mapping(address route => bool)) private _indexed;
 
     event RouteCreated(address indexed route, address indexed owner, WeirRoute.Share[] shares);
@@ -63,6 +67,7 @@ contract WeirFactory is ERC2771Context {
         WeirVault(vault).initialize(owner_, unlockAt, goal);
 
         _vaultsOf[owner_].push(vault);
+        isVault[vault] = true;
         emit VaultCreated(vault, owner_, unlockAt, goal);
     }
 
