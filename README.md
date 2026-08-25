@@ -143,26 +143,59 @@ It is a convenience and never a dependency. Points worth knowing:
 npm test
 ```
 
-33 tests covering the split maths, rounding dust, permissionless distribution,
-a frozen recipient, mainnet style USDT that returns no bool, the savings lock,
-recipient discovery, clone safety, and a user with a literally empty wallet
-creating a route, changing it, and withdrawing savings without ever holding gas.
+**38 contract tests and 26 app tests.** Rather than trust that number, re-derive
+it: `npm test` at the root and `npm test` in `app/` both print their own totals.
+
+They cover the split maths, rounding dust, the settlement bounty, permissionless
+distribution, a recipient frozen by the token issuer, mainnet style USDT that
+returns no bool, the savings lock, recipient discovery, clone safety, NIM
+precision down to the Luna, and the relay endpoint refusing a forged signature,
+an unknown contract, an expired request and one over the gas cap.
+
+The headline ones start by setting an account's balance to zero and then doing
+the thing anyway, because that is the actual claim: **you do not need a gas token
+to use this.**
+
+The `app/` suite also asserts that the committed ABI still matches the compiled
+contracts. That check exists because a stale ABI was once committed and pushed
+while every other test stayed green.
+
+## What talks to Nimiq Pay
+
+| What you do | What it uses |
+| --- | --- |
+| Open the app | Mini Apps Framework, injected providers |
+| Connect, and get moved to the right chain | `eth_requestAccounts`, `wallet_switchEthereumChain` |
+| Create a route or vault without holding gas | `eth_signTypedData_v4`, relayed through ERC-2771 |
+| Get paid in USDT and have it split | Nimiq Pay's EVM provider on Polygon |
+| Get paid in NIM and split that too | `@nimiq/mini-app-sdk`, `listAccounts`, `sendBasicTransaction` |
+| See it in your own language | `window.nimiqPay.language` |
 
 ## Status
 
 Contracts, the mini app and the relayer all work end to end, verified against a
 running chain rather than only in tests: a plain transfer in, a correct split
 out, nothing stranded, a teammate who owns nothing able to release their own
-share, and the relayer picking up an untriggered payment on its own and paying
-everybody their exact percentage.
+share, and settlement funding itself out of the payment.
 
 Target chain is **Polygon**, because that is where Nimiq Pay actually holds
 USDT. Verified on Polygon mainnet: USDT at `0xc2132D05D31c914a87C6611C10748AEb04B58e8F`,
 symbol USDT, 6 decimals.
 
-Not yet done: mainnet deployment, and wiring the app and relayer to the
-gasless path (the contracts support it and are tested, the UI still asks the
-user to send their own transaction).
+**Not yet deployed to Polygon.** Everything above is verified against a local
+chain and a real device, but the contracts are not on mainnet yet, so there is
+no live link worth clicking. That is the next step and it is the only thing
+standing between this and a URL you can open in Nimiq Pay.
+
+### Honestly not done yet
+
+- Not deployed to Polygon, so no live app link.
+- A NIM split is not enforced, and the app says so on the screen where it
+  matters rather than only here.
+- Staking a NIM savings slice was considered and not built: the minimum stake
+  is 100 NIM and unstaking takes 12 hours to 4 days, and none of it is
+  verifiable without real NIM on a real device.
+- The German and Spanish were written by the builder, not a native speaker.
 
 ## Licence
 

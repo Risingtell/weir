@@ -8,6 +8,11 @@ export const weirfactoryAbi = [
         "internalType": "address",
         "name": "forwarder",
         "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "settlementBounty",
+        "type": "uint256"
       }
     ],
     "stateMutability": "nonpayable",
@@ -424,10 +429,31 @@ export const weirrouteAbi = [
         "internalType": "address",
         "name": "forwarder",
         "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "bounty",
+        "type": "uint256"
       }
     ],
     "stateMutability": "nonpayable",
     "type": "constructor"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "balance",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "bounty",
+        "type": "uint256"
+      }
+    ],
+    "name": "BelowSettlementBounty",
+    "type": "error"
   },
   {
     "inputs": [],
@@ -658,6 +684,31 @@ export const weirrouteAbi = [
     "type": "event"
   },
   {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "token",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "to",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      }
+    ],
+    "name": "SettlementPaid",
+    "type": "event"
+  },
+  {
     "inputs": [],
     "name": "MAX_RECIPIENTS",
     "outputs": [
@@ -854,6 +905,19 @@ export const weirrouteAbi = [
     "name": "setRules",
     "outputs": [],
     "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "settlementBounty",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
     "type": "function"
   },
   {

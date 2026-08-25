@@ -29,5 +29,14 @@ out.push(
   "",
 );
 
-writeFileSync("app/src/abi.ts", out.join("\n"));
-console.log(`wrote app/src/abi.ts (${contracts.join(", ")})`);
+const rendered = out.join("\n");
+
+// --stdout lets a test regenerate and compare without writing, so a stale
+// committed ABI is reported rather than silently overwritten by the check
+// that was supposed to catch it.
+if (process.argv.includes("--stdout")) {
+  process.stdout.write(rendered);
+} else {
+  writeFileSync("app/src/abi.ts", rendered);
+  console.log(`wrote app/src/abi.ts (${contracts.join(", ")})`);
+}
