@@ -7,11 +7,18 @@ import { writeFileSync, readFileSync } from "node:fs";
  * frontend and the chain can never disagree about where the contracts are.
  */
 /**
- * 0.01 USDT at six decimals. Comfortably above Polygon gas, small enough to
- * vanish against a real invoice, and refunded to the owner when they settle
- * their own route.
+ * 0.05 USDT at six decimals.
+ *
+ * Sized against measured Polygon gas rather than guessed: a settlement is about
+ * 200k gas, and Polygon was at 277 gwei when this was set, which is around
+ * $0.014. The first attempt at 0.01 USDT would have left a keeper out of pocket
+ * and the whole self-funding idea would have quietly failed.
+ *
+ * This leaves roughly a 3x margin at elevated gas and more when it is calm.
+ * Against a real invoice it disappears, and the owner gets it straight back
+ * when they settle their own route.
  */
-const SETTLEMENT_BOUNTY = 10_000n;
+const SETTLEMENT_BOUNTY = 50_000n;
 
 async function main() {
   const [deployer] = await ethers.getSigners();
@@ -38,7 +45,7 @@ async function main() {
   const factoryAddress = await factory.getAddress();
 
   console.log(`WeirFactory:         ${factoryAddress}`);
-  console.log(`  settlementBounty:    ${SETTLEMENT_BOUNTY} (0.01 USDT)`);
+  console.log(`  settlementBounty:    ${SETTLEMENT_BOUNTY} (0.05 USDT)`);
   console.log(`  routeImplementation: ${await factory.routeImplementation()}`);
   console.log(`  vaultImplementation: ${await factory.vaultImplementation()}`);
 

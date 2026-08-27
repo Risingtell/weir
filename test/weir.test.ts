@@ -586,9 +586,9 @@ describe("Weir", () => {
   });
 
   describe("settlement pays for itself", () => {
-    // 0.01 USDT, comfortably more than Polygon gas and small enough to
-    // disappear against a real invoice.
-    const BOUNTY = 10_000n;
+    // 0.05 USDT. A settlement is ~200k gas and Polygon was at 277 gwei when
+    // this was measured, about $0.014, so this clears the cost with margin.
+    const BOUNTY = 50_000n;
 
     async function withBounty() {
       const [owner, alice, bob, , , keeper] = await ethers.getSigners();

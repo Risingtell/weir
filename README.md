@@ -29,6 +29,22 @@ client pays ──► your Weir ├─────────────► 30
                           └─────────────► 10%  savings vault (locked)
 ```
 
+### Who pays for the split to happen
+
+Somebody has to spend gas to trigger a split, and asking one wallet to fund that
+for every user is not a business, it is a leak.
+
+So the payment funds its own settlement. `distribute` pays a small bounty out of
+the money passing through it to whoever triggered it, which is enough to clear
+the gas with margin. Anyone can collect it, so a funded route gets settled
+without anybody being asked to donate. Settle your own route and the bounty
+comes straight back to you, so it costs the owner nothing to avoid. A payment
+too small to cover the bounty is refused rather than split at a loss.
+
+The figure is measured, not guessed: a settlement is about 200,000 gas, and at
+the Polygon gas price observed while setting it that is roughly $0.014, so the
+bounty is set at $0.05.
+
 ### The honest part about "automatic"
 
 An ERC-20 transfer does not notify the contract that receives it. There is no hook. Nothing can execute the moment money lands, and any project claiming otherwise is doing something else under the hood.
